@@ -85,6 +85,7 @@ const OwnerDashboard: React.FC = () => {
   const [paymentType, setPaymentType] = useState<'registration' | 'promotion'>('registration');
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Transfer Bank'>('QRIS');
   const [payAmount, setPayAmount] = useState(0);
+  const [paymentProof, setPaymentProof] = useState<string>('');
 
   // Check session on load and listen to changes
   useEffect(() => {
@@ -325,21 +326,29 @@ const OwnerDashboard: React.FC = () => {
 
   const processPaymentSubmit = async () => {
     if (!ownerData) return;
+    if (!paymentProof) {
+      setErrorMsg('Harap unggah bukti pembayaran terlebih dahulu sebelum melakukan submit konfirmasi.');
+      return;
+    }
     setSubmitting(true);
+    setErrorMsg('');
     try {
       await paymentsService.addPayment({
         ownerEmail: ownerData.email,
         cafeId: ownerCafe?.id || undefined,
         amount: payAmount,
         type: paymentType,
-        method: paymentMethod
+        method: paymentMethod,
+        proof: paymentProof,
+        status: 'pending' // Admin must review
       });
 
       setShowPaymentModal(false);
+      setPaymentProof('');
       setSuccessMsg(
         paymentType === 'promotion' 
-          ? 'Pembayaran sukses! Kafe Anda resmi dipromosikan sebagai kafe REKOMENDASI UTAMA paling unggul & tampil di beranda!' 
-          : 'Pembayaran sukses! Pendaftaran cafe Anda selesai.'
+          ? 'Pembayaran berhasil dikirim! Menunggu konfirmasi verifikasi bukti bayar oleh Administrator untuk mengaktifkan status Rekomendasi Utama.' 
+          : 'Pendaftaran berhasil dikirim! Menunggu konfirmasi verifikasi bukti bayar oleh Administrator.'
       );
       
       await fetchOwnerDashboardData(ownerData.email);
@@ -1339,9 +1348,19 @@ const OwnerDashboard: React.FC = () => {
                                     <td className="p-4 text-cafe-mocha/80">{new Date(p.createdAt).toLocaleDateString('id-ID')}</td>
                                     <td className="p-4 font-bold text-cafe-brown">Rp {p.amount.toLocaleString('id-ID')}</td>
                                     <td className="p-4">
-                                      <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
-                                        Lunas
-                                      </span>
+                                      {p.status === 'success' ? (
+                                        <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                                          Lunas (Verified)
+                                        </span>
+                                      ) : p.status === 'rejected' ? (
+                                        <span className="bg-rose-50 text-rose-800 border border-rose-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
+                                          Ditolak
+                                        </span>
+                                      ) : (
+                                        <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
+                                          Menunggu Verifikasi
+                                        </span>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -1432,13 +1451,14 @@ const OwnerDashboard: React.FC = () => {
               {/* Instan QRIS screen display */}
               {paymentMethod === 'QRIS' ? (
                 <div className="bg-white p-6 rounded-2xl text-center space-y-3 shadow-inner border border-cafe-pastel/60">
-                  <div className="w-36 h-36 mx-auto bg-gray-50 flex items-center justify-center rounded-xl p-2 select-none border">
+                  <div className="w-40 h-40 mx-auto bg-gray-50 flex items-center justify-center rounded-xl p-2 select-none border">
                     <img 
-                      src="https://images.unsplash.com/photo-1546410531-bb4caa6b424d?auto=format&fit=crop&q=80&w=300" 
-                      alt="Dummy QRIS Code" 
-                      className="w-full h-full object-contain grayscale blur-[1px]"
+                      src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=412411&data=qris-angstria-hangout-pangkalpinang" 
+                      alt="Real-time QRIS Code" 
+                      className="w-full h-full object-contain"
                     />
                   </div>
+                  <p className="font-bold text-cafe-brown text-xs">QRIS Wajib Angstria Hangout</p>
                   <div className="text-[10px] text-cafe-mocha leading-relaxed max-w-sm mx-auto">
                     Pindai kode QRIS di atas menggunakan dompet digital Anda (GOPAY, OVO, DANA, LinkAja, atau m-Banking) saat proses simulasi.
                   </div>
@@ -1455,12 +1475,68 @@ const OwnerDashboard: React.FC = () => {
                 </div>
               )}
 
+              {/* Payment Proof File Upload (Uploader Bukti Pembayaran) */}
+              <div className="space-y-2 border-t border-cafe-pastel pt-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-bold text-cafe-brown uppercase block">Unggah Bukti Transaksi</span>
+                  <span className="text-[9px] text-rose-600 font-extrabold uppercase bg-rose-50 px-2 py-0.5 rounded">Wajib</span>
+                </div>
+                <div className="border-2 border-dashed border-cafe-pastel hover:border-cafe-brown/50 rounded-2xl p-4 bg-white text-center transition-all relative">
+                  {paymentProof ? (
+                    <div className="space-y-2">
+                      <div className="relative w-32 h-32 mx-auto rounded-lg overflow-hidden border border-cafe-pastel">
+                        <img src={paymentProof} alt="Bukti Pembayaran" className="w-full h-full object-cover" />
+                        <button 
+                          onClick={() => setPaymentProof('')}
+                          type="button"
+                          className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1.5 shadow-md hover:bg-red-700 transition-colors cursor-pointer"
+                          title="Hapus Bukti"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-emerald-600 font-bold flex items-center justify-center gap-1">
+                        ✓ Bukti berhasil dimuat
+                      </p>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center gap-2 py-3">
+                      <Camera size={26} className="text-cafe-mocha/60 hover:scale-110 transition-transform" />
+                      <span className="text-xs font-black text-cafe-brown">Pilih Gambar / Ambil Foto Bukti</span>
+                      <span className="text-[9px] text-cafe-mocha/50">PNG, JPG, JPEG (Maks. 800KB)</span>
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 850 * 1024) {
+                            alert('File gambar bukti pembayaran terlalu besar! Harap gunakan file di bawah 800KB.');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setPaymentProof(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
               <button
                 onClick={processPaymentSubmit}
-                disabled={submitting}
-                className="w-full bg-cafe-brown hover:bg-cafe-mocha text-white text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+                disabled={submitting || !paymentProof}
+                className={`w-full text-xs font-black py-4 rounded-xl transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 uppercase tracking-wider ${
+                  !paymentProof 
+                    ? 'bg-gray-200 text-gray-400 border border-gray-300 cursor-not-allowed'
+                    : 'bg-cafe-brown hover:bg-cafe-mocha text-white hover:scale-[1.02]'
+                }`}
               >
-                {submitting ? 'Menyimpan Bukti...' : 'Saya Sudah Berhasil Membayar (Lunas)'}
+                {submitting ? 'Menyimpan Bukti...' : !paymentProof ? 'Unggah Bukti Bayar First' : 'Kirim Bukti Pembayaran'}
               </button>
             </motion.div>
           </div>

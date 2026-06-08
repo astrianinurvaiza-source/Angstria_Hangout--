@@ -243,15 +243,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
 
-          <button 
-            onClick={handleClearLocalData}
-            className="p-2 rounded-xl hover:bg-rose-50 transition-colors text-rose-700 cursor-pointer flex items-center gap-1"
-            title="Hapus Sesi & Data Lokal"
-          >
-            <Trash2 size={18} />
-            <span className="text-[10px] uppercase font-bold tracking-wider hidden lg:inline font-sans">Hapus Data Lokal</span>
-          </button>
-
           {adminSession || user ? (
             <Link to="/admin" className="p-2 hover:bg-cafe-pastel rounded-xl transition-colors text-cafe-brown cursor-pointer flex items-center gap-1.5" title="Dasbor Admin">
               <LayoutDashboard size={18} />
@@ -372,16 +363,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
                 <LogIn size={18} /> Masuk Portal Terpadu
               </Link>
             )}
-
-            <button
-              onClick={() => {
-                setIsMenuOpen(false);
-                handleClearLocalData();
-              }}
-              className="flex items-center gap-2.5 text-rose-700 font-bold text-sm bg-rose-50 hover:bg-rose-100 py-3 px-4 rounded-xl justify-center font-sans cursor-pointer transition-colors mt-2"
-            >
-              <Trash2 size={18} /> Hapus Data Lokal & Sesi
-            </button>
           </motion.div>
         )}
       </AnimatePresence>

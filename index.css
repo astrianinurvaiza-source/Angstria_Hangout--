@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", Georgia, serif;
+
+  --color-cafe-beige: #F5F2ED;
+  --color-cafe-cream: #FFFDF9;
+  --color-cafe-brown: #5A4633;
+  --color-cafe-mocha: #8D775F;
+  --color-cafe-pastel: #EAE0D5;
+  --color-soft-green: #D4E0D7;
+  --color-sage: #9AB0A1;
+}
+
+@variant dark (&:where(.dark, .dark *));
+
+.dark {
+  --color-cafe-beige: #0C0B0A;
+  --color-cafe-cream: #141312;
+  --color-cafe-brown: #FAFAF9;
+  --color-cafe-mocha: #A89584;
+  --color-cafe-pastel: #24211D;
+  --color-soft-green: #212823;
+  --color-sage: #BDD1C4;
+}
+
+@layer base {
+  body {
+    @apply bg-cafe-beige text-cafe-brown font-sans antialiased transition-colors duration-300;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight text-cafe-brown;
+  }
+}
+
+.cafe-card {
+  @apply bg-cafe-cream border border-cafe-pastel rounded-[2rem] overflow-hidden shadow-sm transition-all duration-500 hover:shadow-2xl hover:-translate-y-2;
+}
+
+.dark .cafe-card {
+  @apply shadow-none ring-1 ring-white/5 bg-cafe-cream/50;
+}
+
+.btn-primary {
+  @apply px-8 py-3 bg-cafe-brown text-cafe-cream rounded-full font-semibold transition-all hover:bg-cafe-mocha hover:shadow-lg hover:shadow-cafe-brown/20 active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply px-8 py-3 bg-soft-green/30 text-sage rounded-full font-semibold transition-all hover:bg-soft-green/50 hover:text-cafe-brown active:scale-95 border border-soft-green/50 cursor-pointer;
+}
+
+.glass-nav {
+  @apply sticky top-0 z-50 bg-cafe-beige/70 backdrop-blur-xl border-b border-cafe-pastel/50 transition-colors duration-300;
+}
+
+.input-modern {
+  @apply w-full px-6 py-4 bg-cafe-cream/90 backdrop-blur-sm border border-cafe-pastel rounded-2xl focus:ring-2 focus:ring-cafe-brown/20 focus:border-cafe-brown outline-none transition-all shadow-sm text-cafe-brown placeholder:text-cafe-mocha/40;
+}

@@ -819,4 +819,3 @@ const PlaceDetails: React.FC = () => {
 };
 
 export default PlaceDetails;
-

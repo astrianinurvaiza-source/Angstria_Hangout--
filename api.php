@@ -157,9 +157,16 @@ try {
             `type` VARCHAR(50) NOT NULL,
             `method` VARCHAR(50) NOT NULL,
             `status` VARCHAR(20) DEFAULT 'success',
+            `proof` LONGTEXT DEFAULT NULL,
             `createdAt` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        // Ensure proof column exists in payments
+        $qProof = $conn->query("SHOW COLUMNS FROM `payments` LIKE 'proof'");
+        if ($qProof->rowCount() === 0) {
+            $conn->exec("ALTER TABLE `payments` ADD COLUMN `proof` LONGTEXT DEFAULT NULL");
+        }
 
         // 7. Buat Tabel users jika belum ada
         $conn->exec("CREATE TABLE IF NOT EXISTS `users` (
@@ -990,27 +997,41 @@ switch ($action) {
 
     case 'get_payments':
         $ownerEmail = trim(strtolower($_GET['ownerEmail'] ?? ''));
-
-        if (empty($ownerEmail)) {
-            echo json_encode(["success" => true, "data" => []]);
-            exit();
-        }
+        $all = ($_GET['all'] ?? '') === 'true';
 
         try {
-            $stmt = $conn->prepare("SELECT * FROM payments WHERE LOWER(ownerEmail) = :ownerEmail ORDER BY createdAt DESC");
-            $stmt->execute(['ownerEmail' => $ownerEmail]);
+            if ($all || empty($ownerEmail)) {
+                $stmt = $conn->prepare("SELECT * FROM payments ORDER BY createdAt DESC");
+                $stmt->execute();
+            } else {
+                $stmt = $conn->prepare("SELECT * FROM payments WHERE LOWER(ownerEmail) = :ownerEmail ORDER BY createdAt DESC");
+                $stmt->execute(['ownerEmail' => $ownerEmail]);
+            }
             $payments = $stmt->fetchAll();
 
             $result = [];
             foreach ($payments as $row) {
+                // Get cafe name if exists for richer dashboard info
+                $cafeName = null;
+                if (!empty($row['cafeId'])) {
+                    $stmtCafe = $conn->prepare("SELECT name FROM places WHERE id = :id LIMIT 1");
+                    $stmtCafe->execute(['id' => $row['cafeId']]);
+                    $cafe = $stmtCafe->fetch();
+                    if ($cafe) {
+                        $cafeName = $cafe['name'];
+                    }
+                }
+
                 $result[] = [
                     "id" => $row['id'],
                     "ownerEmail" => $row['ownerEmail'],
                     "cafeId" => $row['cafeId'] ?? null,
+                    "cafeName" => $cafeName,
                     "amount" => floatval($row['amount']),
                     "type" => $row['type'],
                     "method" => $row['method'],
-                    "status" => $row['status'] ?? 'success',
+                    "status" => $row['status'] ?? 'pending',
+                    "proof" => $row['proof'] ?? null,
                     "createdAt" => $row['createdAt']
                 ];
             }
@@ -1028,6 +1049,8 @@ switch ($action) {
         $amount = floatval($data['amount'] ?? 0);
         $type = trim($data['type'] ?? 'registration');
         $method = trim($data['method'] ?? 'QRIS');
+        $proof = trim($data['proof'] ?? ''); // Base64 proof string
+        $status = trim($data['status'] ?? 'pending'); // Default to pending to allow admin approval
 
         if (empty($ownerEmail) || !$amount) {
             echo json_encode(["success" => false, "message" => "Data tidak lengkap"]);
@@ -1037,8 +1060,8 @@ switch ($action) {
         try {
             $invId = 'INV-' . time();
             $stmt = $conn->prepare("
-                INSERT INTO payments (id, ownerEmail, cafeId, amount, type, method, status, createdAt)
-                VALUES (:id, :ownerEmail, :cafeId, :amount, :type, :method, 'success', NOW())
+                INSERT INTO payments (id, ownerEmail, cafeId, amount, type, method, status, proof, createdAt)
+                VALUES (:id, :ownerEmail, :cafeId, :amount, :type, :method, :status, :proof, NOW())
             ");
             $stmt->execute([
                 'id' => $invId,
@@ -1046,17 +1069,20 @@ switch ($action) {
                 'cafeId' => empty($cafeId) ? null : $cafeId,
                 'amount' => $amount,
                 'type' => $type,
-                'method' => $method
+                'method' => $method,
+                'status' => $status,
+                'proof' => empty($proof) ? null : $proof
             ]);
 
-            if ($type === 'promotion' && !empty($cafeId)) {
+            // If it is success and a promotion, set featured directly
+            if ($status === 'success' && $type === 'promotion' && !empty($cafeId)) {
                 $stmtFeatured = $conn->prepare("UPDATE places SET featured = 1 WHERE id = :cafeId");
                 $stmtFeatured->execute(['cafeId' => $cafeId]);
             }
 
             echo json_encode([
                 "success" => true,
-                "message" => "Pembayaran berhasil disimpan",
+                "message" => "Pembayaran berhasil disimpan, menunggu verifikasi Admin",
                 "data" => [
                     "id" => $invId,
                     "ownerEmail" => $ownerEmail,
@@ -1064,11 +1090,85 @@ switch ($action) {
                     "amount" => $amount,
                     "type" => $type,
                     "method" => $method,
-                    "status" => "success"
+                    "status" => $status,
+                    "proof" => $proof
                 ]
             ]);
         } catch (PDOException $e) {
             echo json_encode(["success" => false, "message" => "Gagal menyimpan pembayaran: " . $e->getMessage()]);
+        }
+        break;
+
+    case 'approve_payment':
+        $data = get_input_json();
+        $id = trim($data['id'] ?? '');
+        $status = trim($data['status'] ?? 'success');
+
+        if (empty($id)) {
+            echo json_encode(["success" => false, "message" => "ID Pembayaran wajib diisi"]);
+            exit();
+        }
+
+        try {
+            // Fetch payment to get type and cafeId
+            $stmtPay = $conn->prepare("SELECT * FROM payments WHERE id = :id LIMIT 1");
+            $stmtPay->execute(['id' => $id]);
+            $payment = $stmtPay->fetch();
+
+            if (!$payment) {
+                echo json_encode(["success" => false, "message" => "Transaksi pembayaran tidak ditemukan"]);
+                exit();
+            }
+
+            $stmtUpdate = $conn->prepare("UPDATE payments SET status = :status WHERE id = :id");
+            $stmtUpdate->execute([
+                'status' => $status,
+                'id' => $id
+            ]);
+
+            // If approved and is promotion, feature the cafe
+            if ($status === 'success' && $payment['type'] === 'promotion' && !empty($payment['cafeId'])) {
+                $stmtFeatured = $conn->prepare("UPDATE places SET featured = 1 WHERE id = :cafeId");
+                $stmtFeatured->execute(['cafeId' => $payment['cafeId']]);
+            }
+
+            echo json_encode(["success" => true, "message" => "Status pembayaran berhasil diperbarui"]);
+        } catch (PDOException $e) {
+            echo json_encode(["success" => false, "message" => "Gagal memperbarui pembayaran: " . $e->getMessage()]);
+        }
+        break;
+
+    case 'get_admin_stats':
+        try {
+            // Users Count
+            $vUsers = $conn->query("SELECT COUNT(*) as cnt FROM `users`")->fetch();
+            // Owners Count
+            $vOwners = $conn->query("SELECT COUNT(*) as cnt FROM `owners`")->fetch();
+            // Active Places
+            $vPlaces = $conn->query("SELECT COUNT(*) as cnt FROM `places`")->fetch();
+            // Reservations
+            $vReservations = $conn->query("SELECT COUNT(*) as cnt FROM `reservations`")->fetch();
+            // Comments
+            $vComments = $conn->query("SELECT COUNT(*) as cnt FROM `comments`")->fetch();
+            // Total Payments (revenue)
+            $vRevenue = $conn->query("SELECT SUM(amount) as rev FROM `payments` WHERE status = 'success'")->fetch();
+            // Total Payments count
+            $vPayments = $conn->query("SELECT COUNT(*) as cnt FROM `payments`")->fetch();
+
+            echo json_encode([
+                "success" => true,
+                "data" => [
+                    "usersCount" => intval($vUsers['cnt'] ?? 0),
+                    "ownersCount" => intval($vOwners['cnt'] ?? 0),
+                    "placesCount" => intval($vPlaces['cnt'] ?? 0),
+                    "reservationsCount" => intval($vReservations['cnt'] ?? 0),
+                    "commentsCount" => intval($vComments['cnt'] ?? 0),
+                    "revenue" => floatval($vRevenue['rev'] ?? 0),
+                    "paymentsCount" => intval($vPayments['cnt'] ?? 0)
+                ]
+            ]);
+        } catch (PDOException $e) {
+            echo json_encode(["success" => false, "message" => "Gagal mengambil statistik: " . $e->getMessage()]);
         }
         break;
 

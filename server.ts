@@ -650,36 +650,144 @@ function handleLocalDBEmulator(req: any, res: any) {
 
     case 'get_payments': {
       const ownerEmail = (req.query.ownerEmail || "").trim().toLowerCase();
-      const pays = db.payments.filter((p: any) => p.ownerEmail === ownerEmail);
-      return res.json({ success: true, data: pays, fallback_used: true });
+      const all = (req.query.all === "true" || (req.body && req.body.all === "true"));
+
+      let filteredPays = [];
+      if (all || !ownerEmail) {
+        filteredPays = [...db.payments];
+      } else {
+        filteredPays = db.payments.filter((p: any) => p.ownerEmail?.toLowerCase() === ownerEmail);
+      }
+
+      // Sort by createdAt desc
+      filteredPays.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      // Add cafeName and proper fields
+      const decoratedPays = filteredPays.map((p: any) => {
+        let cafeName = null;
+        if (p.cafeId) {
+          const cafe = db.places.find((pl: any) => pl.id === p.cafeId);
+          if (cafe) {
+            cafeName = cafe.name;
+          }
+        }
+        return {
+          id: p.id || String(p.id),
+          ownerEmail: p.ownerEmail,
+          cafeId: p.cafeId,
+          cafeName,
+          amount: parseFloat(p.amount) || 0,
+          type: p.type,
+          method: p.method,
+          status: p.status || 'pending',
+          proof: p.proof || null,
+          createdAt: p.createdAt
+        };
+      });
+
+      return res.json({ success: true, data: decoratedPays, fallback_used: true });
     }
 
     case 'add_payment': {
       const data = req.body || {};
       const ownerEmail = (data.ownerEmail || "").trim().toLowerCase();
+      const cafeId = data.cafeId || null;
       const amount = parseFloat(data.amount || "0");
       const type = data.type || "registration";
-      const method = data.method || "Transfer";
+      const method = data.method || "QRIS";
+      const proof = data.proof || "";
+      const status = data.status || "pending"; // default to pending for Admin review
 
       if (!ownerEmail || !amount) {
         return res.json({ success: false, message: "Data tidak lengkap", fallback_used: true });
       }
 
+      const invId = 'INV-' + Date.now();
       const newPay = {
-        id: db.payments.length + 1,
+        id: invId,
         ownerEmail,
-        cafeId: data.cafeId || null,
+        cafeId,
         amount,
         type,
         method,
-        status: 'success',
+        status,
+        proof: proof || null,
         createdAt: new Date().toISOString()
       };
 
       db.payments.push(newPay);
+
+      // Feature the cafe if approved immediately and is promotion
+      if (status === 'success' && type === 'promotion' && cafeId) {
+        const place = db.places.find((p: any) => p.id === cafeId);
+        if (place) {
+          place.featured = 1;
+        }
+      }
+
       saveLocalDB(db);
 
-      return res.json({ success: true, data: newPay, fallback_used: true });
+      return res.json({
+        success: true,
+        message: "Pembayaran berhasil disimpan, menunggu verifikasi Admin",
+        fallback_used: true,
+        data: newPay
+      });
+    }
+
+    case 'approve_payment': {
+      const data = req.body || {};
+      const id = String(data.id || "").trim();
+      const status = String(data.status || "success").trim();
+
+      if (!id) {
+        return res.json({ success: false, message: "ID Pembayaran wajib diisi", fallback_used: true });
+      }
+
+      const payment = db.payments.find((p: any) => String(p.id) === id);
+      if (!payment) {
+        return res.json({ success: false, message: "Transaksi pembayaran tidak ditemukan", fallback_used: true });
+      }
+
+      payment.status = status;
+
+      // If approved and is promotion, feature the cafe
+      if (status === 'success' && payment.type === 'promotion' && payment.cafeId) {
+        const place = db.places.find((p: any) => p.id === payment.cafeId);
+        if (place) {
+          place.featured = 1;
+        }
+      }
+
+      saveLocalDB(db);
+      return res.json({ success: true, message: "Status pembayaran berhasil diperbarui", fallback_used: true });
+    }
+
+    case 'get_admin_stats': {
+      const usersCount = db.users.length;
+      const ownersCount = db.owners.length;
+      const placesCount = db.places.length;
+      const reservationsCount = db.reservations.length;
+      const commentsCount = db.comments.length;
+      const paymentsCount = db.payments.length;
+      
+      const revenue = db.payments
+        .filter((p: any) => p.status === 'success')
+        .reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
+
+      return res.json({
+        success: true,
+        fallback_used: true,
+        data: {
+          usersCount,
+          ownersCount,
+          placesCount,
+          reservationsCount,
+          commentsCount,
+          revenue,
+          paymentsCount
+        }
+      });
     }
 
     default: {

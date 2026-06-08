@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Coffee, LayoutDashboard, LogIn, Sun, Moon, Database, Wifi, WifiOff, RefreshCw, Save, RotateCcw, Check, Sparkles, User } from 'lucide-react';
+import { Menu, X, Coffee, LayoutDashboard, LogIn, Sun, Moon, Database, Wifi, WifiOff, RefreshCw, Save, RotateCcw, Check, Sparkles, User, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getApiUrl, setApiUrl, isDatabaseDemoMode } from '../services/dbService';
 
@@ -197,6 +197,15 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
     }
   };
 
+  const handleClearLocalData = () => {
+    if (window.confirm('Tindakan ini akan menghapus semua sesi login (Admin, Pemilik, Pengguna), daftar favorit, pengaturan tema, dan data cache lokal dari browser Anda. Apakah Anda yakin?')) {
+      localStorage.clear();
+      sessionStorage.clear();
+      alert('Semua data lokal dan sesi browser Anda berhasil dihapus.');
+      window.location.href = '/';
+    }
+  };
+
   return (
     <nav className="glass-nav px-6 py-4">
       <div className="max-w-7xl mx-auto flex justify-between items-center">
@@ -229,8 +238,26 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
           <button 
             onClick={toggleDarkMode}
             className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
+            title={darkMode ? "Ganti ke Mode Terang" : "Ganti ke Mode Gelap"}
           >
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </button>
+
+          <button 
+            onClick={() => setIsApiModalOpen(true)}
+            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
+            title="Pengaturan Database"
+          >
+            <Database size={20} />
+          </button>
+
+          <button 
+            onClick={handleClearLocalData}
+            className="p-2 rounded-xl hover:bg-rose-50 transition-colors text-rose-700 cursor-pointer flex items-center gap-1"
+            title="Hapus Sesi & Data Lokal"
+          >
+            <Trash2 size={18} />
+            <span className="text-[10px] uppercase font-bold tracking-wider hidden lg:inline font-sans">Hapus Data Lokal</span>
           </button>
 
           {adminSession || user ? (
@@ -270,8 +297,17 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
         <div className="md:hidden flex items-center gap-2">
           
           <button 
+            onClick={() => setIsApiModalOpen(true)}
+            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
+            title="Pengaturan Database"
+          >
+            <Database size={20} />
+          </button>
+
+          <button 
             onClick={toggleDarkMode}
             className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
+            title={darkMode ? "Mode Terang" : "Mode Gelap"}
           >
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
@@ -352,6 +388,16 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
                 <LogIn size={18} /> Masuk Portal Terpadu
               </Link>
             )}
+
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                handleClearLocalData();
+              }}
+              className="flex items-center gap-2.5 text-rose-700 font-bold text-sm bg-rose-50 hover:bg-rose-100 py-3 px-4 rounded-xl justify-center font-sans cursor-pointer transition-colors mt-2"
+            >
+              <Trash2 size={18} /> Hapus Data Lokal & Sesi
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -436,6 +482,14 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
                   >
                     <RotateCcw size={14} />
                     Reset ke Bawaan
+                  </button>
+
+                  <button 
+                    onClick={handleClearLocalData}
+                    className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    Hapus Semua Data Lokal
                   </button>
                 </div>
               </div>

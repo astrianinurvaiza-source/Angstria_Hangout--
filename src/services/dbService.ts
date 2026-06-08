@@ -483,12 +483,20 @@ export const paymentsService = {
     return result.data || [];
   },
 
+  async getAllPayments(): Promise<any[]> {
+    const API_BASE_URL = getApiUrl();
+    const result = await apiFetch(`${API_BASE_URL}?action=get_payments&all=true`);
+    return result.data || [];
+  },
+
   async addPayment(data: {
     ownerEmail: string;
     cafeId?: string;
     amount: number;
     type: 'registration' | 'promotion';
     method: string;
+    proof?: string;
+    status?: string;
   }): Promise<any> {
     const API_BASE_URL = getApiUrl();
     const result = await apiFetch(`${API_BASE_URL}?action=add_payment`, {
@@ -500,5 +508,29 @@ export const paymentsService = {
       return result.data;
     }
     throw new Error(result.message || 'Gagal menyimpan transaksi pembayaran');
+  },
+
+  async approvePayment(id: string, status: 'success' | 'pending' | 'rejected'): Promise<any> {
+    const API_BASE_URL = getApiUrl();
+    const result = await apiFetch(`${API_BASE_URL}?action=approve_payment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status })
+    });
+    if (result && result.success === true) {
+      return result;
+    }
+    throw new Error(result.message || 'Gagal memproses verifikasi transaksi');
+  }
+};
+
+export const adminService = {
+  async getStats(): Promise<any> {
+    const API_BASE_URL = getApiUrl();
+    const result = await apiFetch(`${API_BASE_URL}?action=get_admin_stats`);
+    if (result && result.success === true) {
+      return result.data;
+    }
+    throw new Error(result.message || 'Gagal mengambil statistik platform');
   }
 };

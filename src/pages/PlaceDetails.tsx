@@ -375,37 +375,58 @@ const PlaceDetails: React.FC = () => {
               <h2 className="text-2xl font-serif font-bold text-cafe-brown mb-6 flex items-center gap-3">
                 <MapPin /> Temukan Kami Di Sini
               </h2>
-              <div className="rounded-3xl overflow-hidden border border-cafe-pastel shadow-lg h-[400px] relative">
-                <iframe
-                  title={`Peta Lokasi ${place.name}`}
-                  src={`https://maps.google.com/maps?q=${place.latitude ?? place.lat ?? -2.1283},${place.longitude ?? place.longtitude ?? place.lng ?? 106.1130}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
-                  width="100%"
-                  height="100%"
-                  style={{ border: 0 }}
-                  allowFullScreen={true}
-                  loading="lazy"
-                ></iframe>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between p-6 bg-cafe-cream rounded-2xl border border-cafe-pastel mt-4">
-                <div className="space-y-1 text-center sm:text-left">
-                  <h4 className="font-bold text-cafe-brown">{place.name}</h4>
-                  <p className="text-xs text-cafe-mocha">{place.location}</p>
-                  {(place.latitude !== undefined || place.lat !== undefined) && (
-                    <p className="text-[10px] text-cafe-mocha font-mono opacity-80 mt-1">
-                      Koordinat: {place.latitude ?? place.lat}, {place.longitude ?? place.longtitude ?? place.lng}
-                    </p>
-                  )}
-                </div>
-                <a
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.location)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary flex items-center gap-2 whitespace-nowrap"
-                >
-                  <MapPin size={18} />
-                  Buka di Google Maps
-                </a>
-              </div>
+              {(() => {
+                const mapLat = place.latitude && !isNaN(parseFloat(place.latitude as any)) 
+                  ? parseFloat(place.latitude as any) 
+                  : (place.lat && !isNaN(parseFloat(place.lat as any)) ? parseFloat(place.lat as any) : -2.1283);
+                  
+                const mapLng = place.longitude && !isNaN(parseFloat(place.longitude as any))
+                  ? parseFloat(place.longitude as any)
+                  : (place.longtitude && !isNaN(parseFloat(place.longtitude as any))
+                    ? parseFloat(place.longtitude as any)
+                    : (place.lng && !isNaN(parseFloat(place.lng as any)) ? parseFloat(place.lng as any) : 106.1130));
+
+                const hasCoords = (place.latitude !== undefined && place.latitude !== null && place.latitude !== '') || 
+                                  (place.lat !== undefined && place.lat !== null && place.lat !== '');
+
+                return (
+                  <>
+                    <div className="rounded-3xl overflow-hidden border border-cafe-pastel shadow-lg h-[400px] relative">
+                      <iframe
+                        title={`Peta Lokasi ${place.name}`}
+                        src={`https://maps.google.com/maps?q=${mapLat},${mapLng}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
+                        width="100%"
+                        height="100%"
+                        style={{ border: 0 }}
+                        allowFullScreen={true}
+                        loading="lazy"
+                        id="location-map-iframe"
+                      ></iframe>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-4 items-center justify-between p-6 bg-cafe-cream rounded-2xl border border-cafe-pastel mt-4">
+                      <div className="space-y-1 text-center sm:text-left">
+                        <h4 className="font-bold text-cafe-brown">{place.name}</h4>
+                        <p className="text-xs text-cafe-mocha">{place.location}</p>
+                        {hasCoords && (
+                          <p className="text-[10px] text-cafe-mocha font-mono opacity-80 mt-1">
+                            Koordinat: <span className="font-bold text-cafe-brown">{mapLat}</span>, <span className="font-bold text-cafe-brown">{mapLng}</span>
+                          </p>
+                        )}
+                      </div>
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.location)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-primary flex items-center gap-2 whitespace-nowrap"
+                        id="open-google-maps"
+                      >
+                        <MapPin size={18} />
+                        Buka di Google Maps
+                      </a>
+                    </div>
+                  </>
+                );
+              })()}
             </section>
 
             {/* Comments Section */}

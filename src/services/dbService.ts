@@ -33,6 +33,12 @@ export const isDatabaseDemoMode = (): boolean => {
 
 // Helper to resolve clean URL path for api.php (always directs strictly to master server location to avoid cached typos)
 export const getApiUrl = (): string => {
+  if (typeof window !== 'undefined') {
+    const customUrl = localStorage.getItem('angstria_api_url') || localStorage.getItem('angstria_live_backend_url') || serverBackendUrl;
+    if (customUrl && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+      return customUrl;
+    }
+  }
   return '/api.php';
 };
 

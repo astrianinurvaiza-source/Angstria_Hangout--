@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   LogIn, Mail, Lock, Coffee, AlertCircle, Sparkles, User, 
-  Building2, ShieldCheck, CheckCircle2, ChevronRight, UserPlus, ArrowRight
+  Building2, ShieldCheck, CheckCircle2, ChevronRight, UserPlus, ArrowRight,
+  Eye, EyeOff
 } from 'lucide-react';
 import { authService, userService, ownerService } from '../services/dbService';
 
@@ -24,6 +25,7 @@ const Login: React.FC<LoginProps> = ({ user }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   // Status feedback
   const [errorMsg, setErrorMsg] = useState('');
@@ -54,6 +56,7 @@ const Login: React.FC<LoginProps> = ({ user }) => {
     setName('');
     setEmail('');
     setPassword('');
+    setShowPassword(false);
   };
 
   const handleAuthModeChange = (mode: 'login' | 'register') => {
@@ -63,6 +66,7 @@ const Login: React.FC<LoginProps> = ({ user }) => {
     setName('');
     setEmail('');
     setPassword('');
+    setShowPassword(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -301,24 +305,30 @@ const Login: React.FC<LoginProps> = ({ user }) => {
             </div>
           )}
 
-          {/* Sesi Email */}
+          {/* Sesi Email / Username untuk Admin */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center ml-2">
-              <label className="text-[10px] uppercase font-bold text-cafe-mocha/70 tracking-[0.2em]">Alamat Email</label>
+              <label className="text-[10px] uppercase font-bold text-cafe-mocha/70 tracking-[0.2em]">
+                {activeRole === 'admin' ? 'Nama Pengguna (Username)' : 'Alamat Email'}
+              </label>
               {activeRole === 'admin' && (
                 <span className="text-[9px] text-cafe-brown font-bold uppercase tracking-wider bg-cafe-beige px-2 py-0.5 rounded">Default Admin</span>
               )}
             </div>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-cafe-mocha/40" size={18} />
+              {activeRole === 'admin' ? (
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-cafe-mocha/40" size={18} />
+              ) : (
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-cafe-mocha/40" size={18} />
+              )}
               <input 
-                type="email" 
+                type={activeRole === 'admin' ? "text" : "email"} 
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
+                autoComplete={activeRole === 'admin' ? "username" : "email"}
                 className="w-full bg-cafe-beige border border-cafe-pastel rounded-2xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-cafe-brown focus:ring-4 focus:ring-primary/5 transition-all text-sm text-cafe-brown font-medium"
-                placeholder={activeRole === 'admin' ? "admin@angstria.com" : "Contoh: astriani@design.com"}
+                placeholder={activeRole === 'admin' ? "admin" : "Contoh: astriani@design.com"}
               />
             </div>
           </div>
@@ -329,14 +339,23 @@ const Login: React.FC<LoginProps> = ({ user }) => {
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-cafe-mocha/40" size={18} />
               <input 
-                type="password" 
+                type={showPassword ? "text" : "password"} 
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
-                className="w-full bg-cafe-beige border border-cafe-pastel rounded-2xl py-3.5 pl-12 pr-4 focus:outline-none focus:border-cafe-brown focus:ring-4 focus:ring-primary/5 transition-all text-sm text-cafe-brown font-medium"
+                className="w-full bg-cafe-beige border border-cafe-pastel rounded-2xl py-3.5 pl-12 pr-12 focus:outline-none focus:border-cafe-brown focus:ring-4 focus:ring-primary/5 transition-all text-sm text-cafe-brown font-medium"
                 placeholder={activeRole === 'admin' ? "admin" : "••••••••"}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-cafe-mocha/40 hover:text-cafe-brown transition-colors cursor-pointer flex items-center justify-center p-1 rounded-full hover:bg-cafe-beige/80"
+                title={showPassword ? "Sembunyikan Kata Sandi" : "Tampilkan Kata Sandi"}
+                id="password-visibility-toggle"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
           </div>
 

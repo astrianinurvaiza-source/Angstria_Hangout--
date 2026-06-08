@@ -67,7 +67,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
   const navLinks = [
     { name: 'Beranda', path: '/' },
     { name: 'Kafe', path: '/places' },
-    { name: 'Favorit', path: '/places?favorites=true' },
     { name: 'Galeri', path: '/gallery' },
   ];
 

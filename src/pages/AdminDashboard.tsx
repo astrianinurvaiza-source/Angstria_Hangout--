@@ -4,9 +4,10 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { 
   Plus, Edit2, Trash2, LayoutDashboard, Coffee, 
   MapPin, Clock, Camera, Save, X, LogOut, 
-  Star, Eye, Sparkles, CheckCircle, AlertCircle, Download, RefreshCcw
+  Star, Eye, Sparkles, CheckCircle, AlertCircle, Download, RefreshCcw,
+  Calendar, MessageSquare, User, Phone, Shield
 } from 'lucide-react';
-import { placesService } from '../services/dbService';
+import { placesService, reservationsService, commentsService } from '../services/dbService';
 import { Place } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -21,6 +22,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [editingPlace, setEditingPlace] = useState<Partial<Place> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+  const [activeTab, setActiveTab] = useState<'places' | 'reservations' | 'comments'>('places');
+  const [reservations, setReservations] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
+  const [loadingComments, setLoadingComments] = useState(false);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'image' | 'gallery') => {
     const file = e.target.files?.[0];
@@ -60,9 +67,81 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   const fetchPlaces = async () => {
     setLoading(true);
-    const data = await placesService.getAllPlaces();
-    setPlaces(data);
-    setLoading(false);
+    try {
+      const data = await placesService.getAllPlaces();
+      setPlaces(data);
+      // Fetch reservations in background
+      fetchReservations(data);
+      // Fetch comments in background
+      fetchComments(data);
+    } catch (err: any) {
+      console.error(err);
+      setStatus({ type: 'error', message: err.message || 'Gagal memuat data dari database MySQL.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchReservations = async (currentPlaces: Place[]) => {
+    setLoadingReservations(true);
+    try {
+      const results: any[] = [];
+      const promises = currentPlaces.map(async (place) => {
+        try {
+          const resList = await reservationsService.getReservations({ placeId: place.id });
+          return resList.map((r: any) => ({ ...r, placeName: place.name }));
+        } catch (e) {
+          return [];
+        }
+      });
+      const resolvedList = await Promise.all(promises);
+      resolvedList.forEach(list => results.push(...list));
+      results.sort((a, b) => b.id - a.id);
+      setReservations(results);
+    } catch (err) {
+      console.warn("Gagal memuat daftar reservasi:", err);
+    } finally {
+      setLoadingReservations(false);
+    }
+  };
+
+  const fetchComments = async (currentPlaces: Place[]) => {
+    setLoadingComments(true);
+    try {
+      const results: any[] = [];
+      const promises = currentPlaces.map(async (place) => {
+        try {
+          const placeDetail = await placesService.getPlaceById(place.id);
+          if (placeDetail && placeDetail.comments) {
+            return placeDetail.comments.map((c: any) => ({ ...c, placeId: place.id, placeName: place.name }));
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      });
+      const resolvedList = await Promise.all(promises);
+      resolvedList.forEach(list => results.push(...list));
+      results.sort((a, b) => b.id - a.id);
+      setComments(results);
+    } catch (err) {
+      console.warn("Gagal memuat ulasan komunitas:", err);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleUpdateReservationStatus = async (id: number, newStatus: 'approved' | 'rejected') => {
+    try {
+      setStatus({ type: 'success', message: 'Sedang memperbarui status...' });
+      await reservationsService.updateReservationStatus(id, newStatus);
+      setStatus({ type: 'success', message: `Status reservasi berhasil diubah menjadi ${newStatus === 'approved' ? 'Disetujui' : 'Ditolak'}!` });
+      fetchPlaces();
+    } catch (err: any) {
+      setStatus({ type: 'error', message: err.message || 'Gagal memperbarui status reservasi.' });
+    } finally {
+      setTimeout(() => setStatus(null), 5000);
+    }
   };
 
   const handleLogout = async () => {
@@ -230,9 +309,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
           {[
             { label: 'Total Kafe', value: places.length, icon: <Coffee />, color: 'text-orange-500' },
-            { label: 'Total Interaksi', value: places.reduce((acc, p) => acc + (p.views || 0), 0), icon: <Eye />, color: 'text-blue-500' },
+            { label: 'Total Reservasi', value: reservations.length, icon: <Calendar />, color: 'text-blue-500' },
             { label: 'Rating Rata-rata', value: (places.reduce((acc, p) => acc + (p.rating || 0), 0) / (places.length || 1)).toFixed(1), icon: <Star />, color: 'text-yellow-500' },
-            { label: 'Unggulan', value: places.filter(p => p.featured).length, icon: <Sparkles />, color: 'text-purple-500' },
+            { label: 'Total Ulasan', value: comments.length, icon: <MessageSquare />, color: 'text-purple-500' },
           ].map((stat, idx) => (
             <div key={idx} className="bg-cafe-cream p-8 rounded-3xl border border-cafe-pastel flex items-center gap-6 shadow-sm">
               <div className={`w-12 h-12 bg-cafe-beige rounded-2xl flex items-center justify-center ${stat.color}`}>
@@ -246,79 +325,236 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           ))}
         </div>
 
-        {/* Table/List */}
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-cafe-pastel gap-6 mb-8 overflow-x-auto pb-1 scrollbar-thin">
+          <button 
+            onClick={() => setActiveTab('places')}
+            className={`pb-4 text-sm font-bold transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+              activeTab === 'places' ? 'border-cafe-brown text-cafe-brown' : 'border-transparent text-cafe-mocha/60'
+            }`}
+          >
+            📋 Daftar Kafe ({places.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('reservations')}
+            className={`pb-4 text-sm font-bold transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+              activeTab === 'reservations' ? 'border-cafe-brown text-cafe-brown' : 'border-transparent text-cafe-mocha/60'
+            }`}
+          >
+            📅 Reservasi Meja ({reservations.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('comments')}
+            className={`pb-4 text-sm font-bold transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+              activeTab === 'comments' ? 'border-cafe-brown text-cafe-brown' : 'border-transparent text-cafe-mocha/60'
+            }`}
+          >
+            💬 Ulasan Komunitas ({comments.length})
+          </button>
+        </div>
+
+        {/* Table/List Area */}
         <div className="bg-cafe-cream rounded-[2rem] border border-cafe-pastel overflow-hidden shadow-lg">
-          <table className="w-full text-left">
-            <thead className="bg-cafe-beige/50 border-b border-cafe-pastel">
-              <tr>
-                <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Informasi Kafe</th>
-                <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Status</th>
-                <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Metrik</th>
-                <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-cafe-pastel">
-              {loading ? (
-                <tr><td colSpan={4}><LoadingSpinner /></td></tr>
-              ) : places.length === 0 ? (
-                <tr><td colSpan={4} className="text-center py-20 text-cafe-mocha opacity-40 italic">Kafe tidak ditemukan. Tambahkan kafe baru atau isi ulang database dengan data rekomendasi.</td></tr>
-              ) : (
-                places.map((place) => (
-                  <tr key={place.id} className="hover:bg-cafe-beige/20 transition-colors">
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-4">
-                        <img src={place.image} className="w-16 h-16 rounded-xl object-cover border border-cafe-pastel" alt={place.name} />
-                        <div>
-                          <h4 className="font-bold text-cafe-brown mb-1">{place.name}</h4>
-                          <div className="flex items-center gap-2 text-xs text-cafe-mocha/60">
-                            <MapPin size={12} /> {place.location}
+          {activeTab === 'places' && (
+            <table className="w-full text-left">
+              <thead className="bg-cafe-beige/50 border-b border-cafe-pastel">
+                <tr>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Informasi Kafe</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Status</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Metrik</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cafe-pastel">
+                {loading ? (
+                  <tr><td colSpan={4}><LoadingSpinner /></td></tr>
+                ) : places.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-20 text-cafe-mocha opacity-40 italic">Kafe tidak ditemukan. Tambahkan kafe baru atau isi ulang database dengan data rekomendasi.</td></tr>
+                ) : (
+                  places.map((place) => (
+                    <tr key={place.id} className="hover:bg-cafe-beige/20 transition-colors">
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-4">
+                          <img src={place.image} className="w-16 h-16 rounded-xl object-cover border border-cafe-pastel" alt={place.name} />
+                          <div>
+                            <h4 className="font-bold text-cafe-brown mb-1">{place.name}</h4>
+                            <div className="flex items-center gap-2 text-xs text-cafe-mocha/60">
+                              <MapPin size={12} /> {place.location}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex flex-col gap-2">
-                        {place.featured ? (
-                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full w-max border border-yellow-200">
-                             <Sparkles size={10} /> Unggulan
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex flex-col gap-2">
+                          {place.featured ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-100 text-yellow-800 text-[10px] font-bold rounded-full w-max border border-yellow-200">
+                               <Sparkles size={10} /> Unggulan
+                            </span>
+                          ) : null}
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-cafe-beige text-cafe-mocha text-[10px] font-bold rounded-full w-max border border-cafe-pastel">
+                            Diterbitkan
                           </span>
-                        ) : null}
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-cafe-beige text-cafe-mocha text-[10px] font-bold rounded-full w-max border border-cafe-pastel">
-                          Diterbitkan
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6">
-                      <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-cafe-brown">
-                          <Eye size={14} className="text-blue-400" /> {place.views}
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-cafe-brown">
-                          <Star size={14} className="text-yellow-400 fill-yellow-400" /> {place.rating}
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-6">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-cafe-brown">
+                            <Eye size={14} className="text-blue-400" /> {place.views}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-cafe-brown">
+                            <Star size={14} className="text-yellow-400 fill-yellow-400" /> {place.rating}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-8 py-6 text-right">
-                      <div className="flex justify-end gap-3">
-                        <button 
-                          onClick={() => { setEditingPlace(place); setIsModalOpen(true); }}
-                          className="p-2 text-cafe-mocha hover:text-cafe-brown bg-cafe-beige rounded-lg transition-all"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(place.id)}
-                          className="p-2 text-red-300 hover:text-red-500 bg-red-50 rounded-lg transition-all"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex justify-end gap-3">
+                          <button 
+                            onClick={() => { setEditingPlace(place); setIsModalOpen(true); }}
+                            className="p-2 text-cafe-mocha hover:text-cafe-brown bg-cafe-beige rounded-lg transition-all"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(place.id)}
+                            className="p-2 text-red-300 hover:text-red-500 bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {activeTab === 'reservations' && (
+            <table className="w-full text-left">
+              <thead className="bg-cafe-beige/50 border-b border-cafe-pastel">
+                <tr>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Kafe & Pemesan</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Detail Kontak</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Jadwal & Tamu</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha text-right">Status / Tindakan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cafe-pastel">
+                {loadingReservations ? (
+                  <tr><td colSpan={4}><LoadingSpinner /></td></tr>
+                ) : reservations.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-20 text-cafe-mocha opacity-40 italic">Belum ada pemesanan meja masuk saat ini.</td></tr>
+                ) : (
+                  reservations.map((res) => (
+                    <tr key={res.id} className="hover:bg-cafe-beige/20 transition-colors">
+                      <td className="px-8 py-6">
+                        <div className="space-y-1">
+                          <p className="font-serif font-black text-xs text-cafe-mocha uppercase tracking-wider">{res.placeName || 'Kafe'}</p>
+                          <h4 className="font-bold text-cafe-brown text-base">{res.customerName}</h4>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-2 text-xs text-cafe-mocha">
+                          <Phone size={14} className="text-cafe-mocha/60" />
+                          <span>{res.customerPhone}</span>
+                        </div>
+                        {res.notes && (
+                          <p className="text-[11px] leading-relaxed italic bg-amber-500/5 text-cafe-brown px-3 py-1 bg-cafe-beige rounded-lg border border-cafe-pastel w-max mt-2">
+                             "{res.notes}"
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-8 py-6 text-sm text-cafe-brown">
+                        <div className="flex items-center gap-1.5 font-bold mb-1">
+                          <Calendar size={14} className="text-cafe-brown/60" /> {res.bookingDate} pada {res.bookingTime}
+                        </div>
+                        <p className="text-xs text-cafe-mocha/70">Jumlah Tamu: <strong className="text-cafe-brown">{res.guests} Kursi</strong></p>
+                      </td>
+                      <td className="px-8 py-6 text-right">
+                        <div className="flex flex-col items-end gap-2.5">
+                          <div>
+                            {res.status === 'approved' ? (
+                              <span className="px-3.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-bold rounded-full border border-emerald-200">
+                                 Disetujui
+                              </span>
+                            ) : res.status === 'rejected' ? (
+                              <span className="px-3.5 py-1 bg-rose-100 text-rose-800 text-[10px] font-bold rounded-full border border-rose-200">
+                                 Ditolak
+                              </span>
+                            ) : (
+                              <span className="px-3.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full border border-amber-200 animate-pulse">
+                                 Menunggu
+                              </span>
+                            )}
+                          </div>
+                          
+                          {res.status === 'pending' && (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => handleUpdateReservationStatus(res.id, 'approved')}
+                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition-all"
+                              >
+                                Setujui
+                              </button>
+                              <button 
+                                onClick={() => handleUpdateReservationStatus(res.id, 'rejected')}
+                                className="px-3 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-sm transition-all"
+                              >
+                                Tolak
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {activeTab === 'comments' && (
+            <table className="w-full text-left">
+              <thead className="bg-cafe-beige/50 border-b border-cafe-pastel">
+                <tr>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Nama Kafe</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Reviewer & Waktu</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Bintang</th>
+                  <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Komentar Masukan</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-cafe-pastel">
+                {loadingComments ? (
+                  <tr><td colSpan={4}><LoadingSpinner /></td></tr>
+                ) : comments.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center py-20 text-cafe-mocha opacity-40 italic">Belum ada komentar/ulasan dari petualang kuliner.</td></tr>
+                ) : (
+                  comments.map((comment) => (
+                    <tr key={comment.id} className="hover:bg-cafe-beige/20 transition-colors">
+                      <td className="px-8 py-6">
+                        <span className="font-serif font-black text-xs text-cafe-brown block mb-1 uppercase tracking-wider">{comment.placeName || 'Kafe'}</span>
+                      </td>
+                      <td className="px-8 py-6">
+                        <h4 className="font-bold text-cafe-brown text-sm mb-1">{comment.username}</h4>
+                        <p className="text-[11px] text-cafe-mocha/60">{new Date(comment.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                      </td>
+                      <td className="px-8 py-6">
+                        <div className="flex items-center gap-1 text-yellow-500 bg-amber-500/5 px-2.5 py-1 rounded-lg border border-yellow-200/40 w-max">
+                          <Star size={12} className="fill-yellow-500" />
+                          <span className="text-xs font-bold text-cafe-brown">{comment.rating}.0</span>
+                        </div>
+                      </td>
+                      <td className="px-8 py-6">
+                        <p className="text-xs text-cafe-mocha leading-relaxed italic max-w-xl">
+                          "{comment.comment}"
+                        </p>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 

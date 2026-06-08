@@ -1,18 +1,38 @@
 import { Place, Comment } from '../types';
 
+let serverBackendUrl = '';
+
+if (typeof window !== 'undefined') {
+  // Sync immediately with cached backend url to prevent page load delays
+  serverBackendUrl = localStorage.getItem('angstria_live_backend_url') || '';
+
+  // Retrieve global phpMyAdmin/Apache config from the central Express backend server
+  fetch('/api/backend-url')
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.target_api_url) {
+        const oldUrl = serverBackendUrl;
+        serverBackendUrl = data.target_api_url;
+        localStorage.setItem('angstria_live_backend_url', data.target_api_url);
+        
+        // If the URL has updated, notify the app so pages can re-render or pull fresh data
+        if (oldUrl !== data.target_api_url) {
+          window.dispatchEvent(new Event('angstria-api-url-changed'));
+        }
+      }
+    })
+    .catch(err => {
+      console.warn('Gagal memuat URL backend otomatis dari server:', err);
+    });
+}
+
 // Detect whether we are currently using fallback demo data
 export const isDatabaseDemoMode = (): boolean => {
   return false;
 };
 
-// Helper to resolve clean URL path for api.php (loads from persisted settings in localStorage if present, or defaults to local proxy)
+// Helper to resolve clean URL path for api.php (always directs strictly to master server location to avoid cached typos)
 export const getApiUrl = (): string => {
-  if (typeof window !== 'undefined') {
-    const customUrl = localStorage.getItem('angstria_api_url');
-    if (customUrl && customUrl.trim()) {
-      return customUrl.trim();
-    }
-  }
   return '/api.php';
 };
 
@@ -92,19 +112,87 @@ const normalizePlace = (p: any): Place => {
   };
 };
 
+const apiFetch = async (url: string, options?: RequestInit): Promise<any> => {
+  try {
+    // Attempt direct database connection first (faster, and lets public/dev browsers hit local XAMPP/localhost directly)
+    const response = await fetch(url, options);
+    const text = await response.text();
+
+    if (!response.ok) {
+      let errorMsg = 'DBMS connection failed.';
+      try {
+        const errJson = JSON.parse(text);
+        if (errJson && errJson.message) {
+          errorMsg = errJson.message;
+        }
+      } catch (e) {
+        errorMsg = `HTTP Error ${response.status}: ${response.statusText || 'Gagal terhubung'}`;
+      }
+      throw new Error(errorMsg);
+    }
+
+    if (text.trim().startsWith('<?php') || text.includes('<?php')) {
+      throw new Error('Server mengembalikan kode PHP mentah. Pastikan Apache/XAMPP aktif dan memproses file PHP dengan benar.');
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error('Format tanggapan bukan JSON valid. Pastikan file api.php mengembalikan format JSON yang sesuai.');
+    }
+  } catch (err: any) {
+    // If direct local link failed (e.g., localhost/XAMPP cannot be accessed directly by a different gadget, or CORS issue)
+    // AND the URL we attempted was not already the node proxy server /api.php path, fallback cleanly through our cloud node.js secure proxy!
+    if (typeof window !== 'undefined' && !url.startsWith('/api.php') && !url.includes(window.location.host + '/api.php')) {
+      console.warn(`Koneksi langsung ke ${url} gagal (${err.message}). Beralih menggunakan jalur aman cloud NodeJS proxy...`);
+      
+      try {
+        const urlObj = new URL(url, window.location.href);
+        const searchParams = urlObj.searchParams.toString();
+        const proxyUrl = `/api.php${searchParams ? `?${searchParams}` : ''}`;
+        
+        const proxyOptions: RequestInit = {
+          ...options,
+          headers: {
+            ...(options?.headers || {}),
+            'Content-Type': 'application/json'
+          }
+        };
+
+        const response = await fetch(proxyUrl, proxyOptions);
+        const text = await response.text();
+
+        if (!response.ok) {
+          let errorMsg = 'DBMS Cloud Proxy failed.';
+          try {
+            const errJson = JSON.parse(text);
+            if (errJson && errJson.message) {
+              errorMsg = errJson.message;
+            }
+          } catch (e) {
+            errorMsg = `Server Proxy Error ${response.status}: ${response.statusText || 'Terputus'}`;
+          }
+          throw new Error(errorMsg);
+        }
+
+        if (text.trim().startsWith('<?php') || text.includes('<?php')) {
+          throw new Error('Server proxy NodeJS mendeteksi tanggapan kode PHP mentah dari Apache.');
+        }
+
+        return JSON.parse(text);
+      } catch (proxyErr: any) {
+        throw new Error(proxyErr.message || 'Koneksi langsung maupun jalur NodeJS Proxy gagal.');
+      }
+    }
+    throw err;
+  }
+};
+
 export const placesService = {
   // 1. Ambil semua kafe dari MySQL phpMyAdmin
   async getAllPlaces(): Promise<Place[]> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=places`);
-    if (!response.ok) throw new Error('Query server database gagal.');
-
-    const text = await response.text();
-    if (text.trim().startsWith('<?php') || text.includes('<?php')) {
-      throw new Error('Server mengembalikan kode PHP mentah. Diperlukan server PHP.');
-    }
-
-    const data = JSON.parse(text);
+    const data = await apiFetch(`${API_BASE_URL}?action=places`);
 
     if (data && data.success === true && Array.isArray(data.data)) {
       return data.data.map(normalizePlace);
@@ -124,15 +212,7 @@ export const placesService = {
   // 3. Ambil data kafe spesifik berdasarkan ID
   async getPlaceById(id: string): Promise<(Place & { comments?: Comment[] }) | null> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=place&id=${id}`);
-    if (!response.ok) throw new Error('Gagal memuat detail.');
-
-    const text = await response.text();
-    if (text.trim().startsWith('<?php') || text.includes('<?php')) {
-      throw new Error('Kode PHP mentah.');
-    }
-
-    const data = JSON.parse(text);
+    const data = await apiFetch(`${API_BASE_URL}?action=place&id=${id}`);
 
     if (data && data.success === true && data.data) {
       return {
@@ -172,12 +252,11 @@ export const placesService = {
       ...place
     };
 
-    const response = await fetch(`${API_BASE_URL}?action=create_place`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=create_place`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const result = await response.json();
     if (result && (result.success === true || result.status === 'success')) {
       return result.id || generatedId;
     }
@@ -187,12 +266,11 @@ export const placesService = {
   // 5. Perbarui data kafe
   async updatePlace(id: string, updates: Partial<Place>): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=update_place`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=update_place`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...updates })
     });
-    const result = await response.json();
     if (result && result.success !== true && result.status !== 'success') {
       throw new Error(result.message || 'Gagal memperbarui data kafe');
     }
@@ -201,12 +279,11 @@ export const placesService = {
   // 6. Hapus kafe
   async deletePlace(id: string): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=delete_place&id=${id}`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=delete_place&id=${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id })
     });
-    const result = await response.json();
     if (result && result.success !== true && result.status !== 'success') {
       throw new Error(result.message || 'Gagal menghapus kafe');
     }
@@ -215,7 +292,7 @@ export const placesService = {
   // 7. Tambahkan jumlah kunjungan / views
   async incrementViews(id: string): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    await fetch(`${API_BASE_URL}?action=increment_views&id=${id}`, {
+    await apiFetch(`${API_BASE_URL}?action=increment_views&id=${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });
@@ -224,10 +301,9 @@ export const placesService = {
   // 8. Reset database
   async resetDatabase(): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=reset_db`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=reset_db`, {
       method: 'POST'
     });
-    const result = await response.json();
     if (result && result.success !== true) {
       throw new Error(result.message || 'Gagal mereset database phpMyAdmin');
     }
@@ -239,9 +315,7 @@ export const commentsService = {
   async getCommentsByPlaceId(placeId: string): Promise<Comment[]> {
     const API_BASE_URL = getApiUrl();
     try {
-      const response = await fetch(`${API_BASE_URL}?action=place&id=${placeId}`);
-      if (!response.ok) throw new Error('Gagal mengambil data ulasan');
-      const placeData = await response.json();
+      const placeData = await apiFetch(`${API_BASE_URL}?action=place&id=${placeId}`);
       return placeData.comments || [];
     } catch {
       return [];
@@ -251,12 +325,11 @@ export const commentsService = {
   // 2. Kirim ulasan / komentar baru
   async addComment(placeId: string, username: string, comment: string, rating: number): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=add_comment`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=add_comment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ placeId, username, comment, rating })
     });
-    const result = await response.json();
     if (result.success !== true && result.status !== 'success') {
       throw new Error(result.message || 'Ulasan gagal dikirim');
     }
@@ -266,12 +339,11 @@ export const commentsService = {
 export const authService = {
   async login(email: string, password: string): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=login`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    const result = await response.json();
     if (result && (result.success === true || result.status === 'success')) {
       const userObj = result.user;
       return {
@@ -289,12 +361,11 @@ export const authService = {
 export const ownerService = {
   async register(name: string, email: string, password: string): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=owner_register`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=owner_register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password })
     });
-    const result = await response.json();
     if (result && result.success === true) {
       return result.owner;
     }
@@ -303,12 +374,11 @@ export const ownerService = {
 
   async login(email: string, password: string): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=owner_login`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=owner_login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    const result = await response.json();
     if (result && result.success === true) {
       return result.owner;
     }
@@ -317,8 +387,7 @@ export const ownerService = {
 
   async getProfile(email: string): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=get_owner&email=${encodeURIComponent(email)}`);
-    const result = await response.json();
+    const result = await apiFetch(`${API_BASE_URL}?action=get_owner&email=${encodeURIComponent(email)}`);
     if (result && result.success === true) {
       return result.owner;
     }
@@ -326,21 +395,50 @@ export const ownerService = {
   }
 };
 
+export const userService = {
+  async register(name: string, email: string, password: string): Promise<any> {
+    const API_BASE_URL = getApiUrl();
+    const result = await apiFetch(`${API_BASE_URL}?action=user_register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+    if (result && result.success === true) {
+      return result.user;
+    }
+    throw new Error(result.message || 'Gagal mendaftar sebagai pengguna baru');
+  },
+
+  async login(email: string, password: string): Promise<any> {
+    const API_BASE_URL = getApiUrl();
+    const result = await apiFetch(`${API_BASE_URL}?action=user_login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (result && result.success === true) {
+      return result.user;
+    }
+    throw new Error(result.message || 'Login pengguna gagal. Silakan coba kembali.');
+  }
+};
+
 export const reservationsService = {
-  async getReservations(params: { placeId?: string; ownerEmail?: string }): Promise<any[]> {
+  async getReservations(params: { placeId?: string; ownerEmail?: string; customerEmail?: string }): Promise<any[]> {
     const API_BASE_URL = getApiUrl();
     let url = `${API_BASE_URL}?action=get_reservations`;
     if (params.placeId) url += `&placeId=${params.placeId}`;
     if (params.ownerEmail) url += `&ownerEmail=${encodeURIComponent(params.ownerEmail)}`;
+    if (params.customerEmail) url += `&customerEmail=${encodeURIComponent(params.customerEmail)}`;
 
-    const response = await fetch(url);
-    const result = await response.json();
+    const result = await apiFetch(url);
     return result.data || [];
   },
 
   async createReservation(data: {
     placeId: string;
     customerName: string;
+    customerEmail?: string;
     customerPhone: string;
     bookingDate: string;
     bookingTime: string;
@@ -348,12 +446,11 @@ export const reservationsService = {
     notes: string;
   }): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=add_reservation`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=add_reservation`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    const result = await response.json();
     if (result && result.success === true) {
       return result.data;
     }
@@ -362,12 +459,11 @@ export const reservationsService = {
 
   async updateReservationStatus(reservationId: number, status: string): Promise<void> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=update_reservation_status`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=update_reservation_status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reservationId, status })
     });
-    const result = await response.json();
     if (result && result.success !== true) {
       throw new Error(result.message || 'Gagal memperbarui status reservasi');
     }
@@ -377,8 +473,7 @@ export const reservationsService = {
 export const paymentsService = {
   async getPayments(ownerEmail: string): Promise<any[]> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=get_payments&ownerEmail=${encodeURIComponent(ownerEmail)}`);
-    const result = await response.json();
+    const result = await apiFetch(`${API_BASE_URL}?action=get_payments&ownerEmail=${encodeURIComponent(ownerEmail)}`);
     return result.data || [];
   },
 
@@ -390,12 +485,11 @@ export const paymentsService = {
     method: string;
   }): Promise<any> {
     const API_BASE_URL = getApiUrl();
-    const response = await fetch(`${API_BASE_URL}?action=add_payment`, {
+    const result = await apiFetch(`${API_BASE_URL}?action=add_payment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
-    const result = await response.json();
     if (result && result.success === true) {
       return result.data;
     }

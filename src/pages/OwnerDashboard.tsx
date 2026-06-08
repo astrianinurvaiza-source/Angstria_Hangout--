@@ -86,20 +86,33 @@ const OwnerDashboard: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'QRIS' | 'Transfer Bank'>('QRIS');
   const [payAmount, setPayAmount] = useState(0);
 
-  // Check session on load
+  // Check session on load and listen to changes
   useEffect(() => {
-    const savedOwner = localStorage.getItem('angstria_owner_session');
-    if (savedOwner) {
-      try {
-        const parsed = JSON.parse(savedOwner);
-        setOwnerData(parsed);
-        setIsLoggedIn(true);
-        fetchOwnerDashboardData(parsed.email);
-      } catch (e) {
-        // Clear corrupt
-        localStorage.removeItem('angstria_owner_session');
+    const checkOwner = () => {
+      const savedOwner = localStorage.getItem('angstria_owner_session');
+      if (savedOwner) {
+        try {
+          const parsed = JSON.parse(savedOwner);
+          setOwnerData(parsed);
+          setIsLoggedIn(true);
+          fetchOwnerDashboardData(parsed.email);
+        } catch (e) {
+          localStorage.removeItem('angstria_owner_session');
+          setOwnerData(null);
+          setIsLoggedIn(false);
+        }
+      } else {
+        setOwnerData(null);
+        setIsLoggedIn(false);
       }
-    }
+    };
+    checkOwner();
+    window.addEventListener('storage', checkOwner);
+    window.addEventListener('owner-auth-changed', checkOwner);
+    return () => {
+      window.removeEventListener('storage', checkOwner);
+      window.removeEventListener('owner-auth-changed', checkOwner);
+    };
   }, []);
 
   const fetchOwnerDashboardData = async (email: string) => {
@@ -183,6 +196,7 @@ const OwnerDashboard: React.FC = () => {
       setOwnerData(res);
       setIsLoggedIn(true);
       localStorage.setItem('angstria_owner_session', JSON.stringify(res));
+      window.dispatchEvent(new Event('owner-auth-changed'));
       await fetchOwnerDashboardData(res.email);
     } catch (err: any) {
       setErrorMsg(err.message || 'Proses otentikasi gagal.');
@@ -343,6 +357,7 @@ const OwnerDashboard: React.FC = () => {
     setReservations([]);
     setPayments([]);
     setIsLoggedIn(false);
+    window.dispatchEvent(new Event('owner-auth-changed'));
   };
 
   return (

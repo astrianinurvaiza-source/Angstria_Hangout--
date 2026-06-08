@@ -295,3 +295,19 @@ CREATE TABLE IF NOT EXISTS `payments` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 9. Table Structure for `users`
+CREATE TABLE IF NOT EXISTS `users` (
+  `id` INT AUTO_INCREMENT NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `email` VARCHAR(100) NOT NULL UNIQUE,
+  `password` VARCHAR(255) NOT NULL,
+  `createdAt` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Seeding Data for `users`
+INSERT INTO `users` (`id`, `name`, `email`, `password`) VALUES
+(1, 'Astriani', 'fitri@gmail.com', 'user123'),
+(2, 'Agus Wisnu', 'agus@gmail.com', 'user123')
+ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
+

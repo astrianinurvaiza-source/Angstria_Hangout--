@@ -16,6 +16,7 @@ import About from './pages/About';
 import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
 import OwnerDashboard from './pages/OwnerDashboard';
+import UserDashboard from './pages/UserDashboard';
 
 import { FavoritesProvider } from './context/FavoritesContext';
 
@@ -85,6 +86,7 @@ const App: React.FC = () => {
                 <Route path="/admin" element={<AdminDashboard user={user} />} />
                 <Route path="/login" element={<Login user={user} />} />
                 <Route path="/owner" element={<OwnerDashboard />} />
+                <Route path="/dashboard" element={<UserDashboard />} />
               </Routes>
             </AnimatePresence>
           </main>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Coffee, LayoutDashboard, LogIn, Sun, Moon, Database, Wifi, WifiOff, RefreshCw, Save, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { Menu, X, Coffee, LayoutDashboard, LogIn, Sun, Moon, Database, Wifi, WifiOff, RefreshCw, Save, RotateCcw, Check, Sparkles, User } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getApiUrl, setApiUrl, isDatabaseDemoMode } from '../services/dbService';
 
@@ -19,12 +19,56 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
   
   const location = useLocation();
 
+  const [userSession, setUserSession] = useState<any>(null);
+  const [ownerSession, setOwnerSession] = useState<any>(null);
+  const [adminSession, setAdminSession] = useState<any>(null);
+
+  useEffect(() => {
+    const checkAllSessions = () => {
+      // 1. User Session
+      const savedUser = localStorage.getItem('angstria_user_session');
+      if (savedUser) {
+        try { setUserSession(JSON.parse(savedUser)); } catch { setUserSession(null); }
+      } else {
+        setUserSession(null);
+      }
+
+      // 2. Owner Session
+      const savedOwner = localStorage.getItem('angstria_owner_session');
+      if (savedOwner) {
+        try { setOwnerSession(JSON.parse(savedOwner)); } catch { setOwnerSession(null); }
+      } else {
+        setOwnerSession(null);
+      }
+
+      // 3. Admin Session
+      const savedAdmin = localStorage.getItem('angstria_admin_session');
+      if (savedAdmin) {
+        try { setAdminSession(JSON.parse(savedAdmin)); } catch { setAdminSession(null); }
+      } else {
+        setAdminSession(null);
+      }
+    };
+    
+    checkAllSessions();
+    window.addEventListener('storage', checkAllSessions);
+    window.addEventListener('user-auth-changed', checkAllSessions);
+    window.addEventListener('owner-auth-changed', checkAllSessions);
+    window.addEventListener('admin-auth-changed', checkAllSessions);
+    
+    return () => {
+      window.removeEventListener('storage', checkAllSessions);
+      window.removeEventListener('user-auth-changed', checkAllSessions);
+      window.removeEventListener('owner-auth-changed', checkAllSessions);
+      window.removeEventListener('admin-auth-changed', checkAllSessions);
+    };
+  }, []);
+
   const navLinks = [
     { name: 'Beranda', path: '/' },
     { name: 'Kafe', path: '/places' },
     { name: 'Favorit', path: '/places?favorites=true' },
     { name: 'Galeri', path: '/gallery' },
-    { name: 'Pemilik Kafe', path: '/owner' },
   ];
 
   const isActive = (path: string) => location.pathname === path;
@@ -183,19 +227,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
           
           <div className="h-6 w-px bg-cafe-pastel mx-2"></div>
 
-          {/* Database Setup Trigger */}
-          <button 
-            onClick={() => {
-              setApiUrlState(getApiUrl());
-              setIsApiModalOpen(true);
-            }}
-            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown flex items-center gap-1.5 cursor-pointer relative"
-            title="Koneksi phpMyAdmin"
-          >
-            <Database size={20} className="hover:rotate-12 transition-transform" />
-            <span className={`w-2 h-2 rounded-full animate-pulse ${isDatabaseDemoMode() ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-          </button>
-
           <button 
             onClick={toggleDarkMode}
             className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
@@ -203,31 +234,41 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
             {darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
 
-          {user ? (
-            <Link to="/admin" className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer">
-              <LayoutDashboard size={20} />
+          {adminSession || user ? (
+            <Link to="/admin" className="p-2 hover:bg-cafe-pastel rounded-xl transition-colors text-cafe-brown cursor-pointer flex items-center gap-1.5" title="Dasbor Admin">
+              <LayoutDashboard size={18} />
+              <span className="text-[11px] uppercase font-bold tracking-wider">Admin</span>
             </Link>
-          ) : (
-            <Link to="/login" className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer">
-              <LogIn size={20} />
+          ) : null}
+
+          {ownerSession ? (
+            <Link to="/owner" className="p-2 hover:bg-cafe-pastel rounded-xl transition-colors text-amber-800 cursor-pointer flex items-center gap-1.5" title="Dasbor Pemilik">
+              <div className="w-6 h-6 bg-amber-800 text-white rounded-full flex items-center justify-center font-bold text-xs">
+                {ownerSession.name.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-[11px] uppercase font-bold tracking-wider hidden lg:inline">Pemilik: {ownerSession.name.split(' ')[0]}</span>
+            </Link>
+          ) : null}
+
+          {userSession ? (
+            <Link to="/dashboard" className="p-2 hover:bg-cafe-pastel rounded-xl transition-colors text-cafe-brown cursor-pointer flex items-center gap-1.5" title="Dasbor Pengguna">
+              <div className="w-6 h-6 bg-cafe-brown text-cafe-cream rounded-full flex items-center justify-center font-bold text-xs">
+                {userSession.name.charAt(0).toUpperCase()}
+              </div>
+              <span className="text-[11px] uppercase font-bold tracking-wider hidden lg:inline">Pengguna: {userSession.name.split(' ')[0]}</span>
+            </Link>
+          ) : null}
+
+          {!(adminSession || user || ownerSession || userSession) && (
+            <Link to="/login" className="flex items-center gap-1.5 bg-cafe-brown text-cafe-cream py-2 px-4 rounded-xl text-xs font-bold hover:bg-cafe-brown/90 transition-all shadow-sm" title="Masuk Portal">
+              <LogIn size={14} />
+              <span>Masuk Portal</span>
             </Link>
           )}
         </div>
 
         {/* Mobile Nav Actions */}
         <div className="md:hidden flex items-center gap-2">
-          {/* Mobile Database Trigger */}
-          <button 
-            onClick={() => {
-              setApiUrlState(getApiUrl());
-              setIsApiModalOpen(true);
-            }}
-            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown flex items-center justify-center cursor-pointer"
-            title="Koneksi phpMyAdmin"
-          >
-            <Database size={20} />
-            <span className={`w-1.5 h-1.5 rounded-full ml-1 ${isDatabaseDemoMode() ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-          </button>
           
           <button 
             onClick={toggleDarkMode}
@@ -267,21 +308,49 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
               </Link>
             ))}
             <div className="h-px bg-cafe-pastel w-full"></div>
-            {user ? (
+            {adminSession || user ? (
               <Link
                 to="/admin"
                 onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-2 text-cafe-brown font-medium"
+                className="flex items-center gap-2.5 text-cafe-brown font-bold text-sm bg-cafe-pastel/30 py-2.5 px-4 rounded-xl"
               >
-                <LayoutDashboard size={20} /> Dasbor Admin
+                <LayoutDashboard size={18} /> Dasbor Admin
               </Link>
-            ) : (
+            ) : null}
+
+            {ownerSession ? (
+              <Link
+                to="/owner"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-2.5 text-amber-800 font-bold text-sm bg-amber-50 py-2.5 px-4 rounded-xl"
+              >
+                <div className="w-5 h-5 bg-amber-800 text-white rounded-full flex items-center justify-center font-bold text-xs uppercase">
+                  {ownerSession.name.charAt(0)}
+                </div>
+                Portal Pemilik: {ownerSession.name}
+              </Link>
+            ) : null}
+
+            {userSession ? (
+              <Link
+                to="/dashboard"
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-2.5 text-cafe-brown font-bold text-sm bg-cafe-brown/10 py-2.5 px-4 rounded-xl"
+              >
+                <div className="w-5 h-5 bg-cafe-brown text-cafe-cream rounded-full flex items-center justify-center font-bold text-xs uppercase">
+                  {userSession.name.charAt(0)}
+                </div>
+                Portal Pengguna: {userSession.name}
+              </Link>
+            ) : null}
+
+            {!(adminSession || user || ownerSession || userSession) && (
               <Link
                 to="/login"
                 onClick={() => setIsMenuOpen(false)}
-                className="flex items-center gap-2 text-cafe-brown font-medium"
+                className="flex items-center gap-2 text-cafe-cream font-bold text-sm bg-cafe-brown py-3 px-4 rounded-xl justify-center shadow-md cursor-pointer"
               >
-                <LogIn size={20} /> Masuk Admin
+                <LogIn size={18} /> Masuk Portal Terpadu
               </Link>
             )}
           </motion.div>

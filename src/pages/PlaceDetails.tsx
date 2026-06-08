@@ -42,16 +42,48 @@ const PlaceDetails: React.FC = () => {
 
   const favorite = id ? isFavorite(id) : false;
 
+  useEffect(() => {
+    const savedUserSession = localStorage.getItem('angstria_user_session');
+    if (savedUserSession) {
+      try {
+        const u = JSON.parse(savedUserSession);
+        if (u && u.name) {
+          setReservationForm(prev => ({
+            ...prev,
+            customerName: u.name
+          }));
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
   const handleReservationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!id) return;
     setSubmittingReservation(true);
     setReservationSuccessMessage('');
     setReservationErrorMessage('');
+
+    let customerEmail: string | undefined;
+    const savedUserSession = localStorage.getItem('angstria_user_session');
+    if (savedUserSession) {
+      try {
+        const u = JSON.parse(savedUserSession);
+        if (u && u.email) {
+          customerEmail = u.email;
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
     try {
       await reservationsService.createReservation({
         placeId: id,
         customerName: reservationForm.customerName,
+        customerEmail,
         customerPhone: reservationForm.customerPhone,
         bookingDate: reservationForm.bookingDate,
         bookingTime: reservationForm.bookingTime,
@@ -60,7 +92,7 @@ const PlaceDetails: React.FC = () => {
       });
       setReservationSuccessMessage('Reservasi meja berhasil diajukan! Menunggu konfirmasi pemilik kafe.');
       setReservationForm({
-        customerName: '',
+        customerName: savedUserSession ? JSON.parse(savedUserSession).name || '' : '',
         customerPhone: '',
         bookingDate: '',
         bookingTime: '',

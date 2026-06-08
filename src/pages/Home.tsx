@@ -28,7 +28,6 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
 
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -50,22 +49,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     fetchPlaces();
   }, []);
-
-  const handleResetDatabase = async () => {
-    if (!window.confirm('Tindakan ini akan mengosongkan dan mengatur ulang tabel database phpMyAdmin Anda ke 10 kafe rekomendasi asli di Pangkal Pinang. Lanjutkan?')) {
-      return;
-    }
-    setResetting(true);
-    try {
-      await placesService.resetDatabase();
-      alert('Sukses! Data master 10 kafe di Pangkal Pinang telah berhasil dimasukkan ke database Anda.');
-      await fetchPlaces();
-    } catch (e: any) {
-      alert(`Gagal reset database: ${e.message || e}\n\nPastikan:\n1. Server XAMPP (Apache/MySQL) atau Hosting Anda sudah aktif.\n2. Nama database Anda adalah 'angstria_hangout'.\n3. File api.php sudah diletakkan dengan benar.`);
-    } finally {
-      setResetting(false);
-    }
-  };
 
   useEffect(() => {
     if (featuredPlaces.length > 0) {
@@ -362,16 +345,15 @@ const Home: React.FC = () => {
                 </div>
               ) : (
                 <p className="text-xs text-cafe-mocha leading-relaxed">
-                  Data kafe saat ini sedang kosong. Klik tombol di bawah ini untuk mendaftarkan 10 kafe estetik secara otomatis ke sistem database Anda.
+                  Data kafe saat ini sedang kosong. Silakan masuk ke <strong>Dasbor Admin</strong> untuk mendaftarkan kafe baru.
                 </p>
               )}
               <div className="flex flex-col gap-2 pt-2">
                 <button 
-                  onClick={handleResetDatabase}
-                  disabled={resetting}
-                  className="px-6 py-3 bg-cafe-brown text-white text-xs font-semibold rounded-full hover:bg-cafe-mocha transition-all disabled:opacity-50 cursor-pointer"
+                  onClick={fetchPlaces}
+                  className="px-6 py-2.5 border border-cafe-pastel hover:bg-cafe-pastel text-xs font-semibold rounded-full transition-all text-cafe-brown cursor-pointer"
                 >
-                  {resetting ? 'Sedang Sinkronisasi...' : '✨ Impor 10 Data Master Kafe'}
+                  Refresh Data
                 </button>
               </div>
             </div>
@@ -417,8 +399,8 @@ const Home: React.FC = () => {
                 <p className="leading-relaxed text-[11px] font-medium">{errorMsg}</p>
               </div>
             ) : (
-              <p className="text-xs text-cafe-mocha leading-relaxed">
-                Belum ada data kafe yang dimuat. Anda dapat mendatangkan data baru secara instan atau mendaftarkannya lewat <strong>Dasbor Admin</strong>.
+              <p className="text-xs text-cafe-mocha leading-relaxed font-medium">
+                Belum ada data kafe yang tersedia di database Anda. Anda dapat mendaftarkan kafe baru melalui <strong>Dasbor Admin</strong>.
               </p>
             )}
             <div className="flex gap-2 justify-center pt-2">
@@ -427,13 +409,6 @@ const Home: React.FC = () => {
                 className="px-6 py-2 border border-cafe-pastel hover:bg-cafe-pastel text-xs font-bold rounded-full transition-all text-cafe-brown cursor-pointer"
               >
                 Refresh Data
-              </button>
-              <button 
-                onClick={handleResetDatabase}
-                disabled={resetting}
-                className="px-6 py-2 bg-cafe-brown text-cafe-cream hover:bg-cafe-mocha text-xs font-bold rounded-full transition-all cursor-pointer disabled:opacity-50"
-              >
-                Impor Data Otomatis
               </button>
             </div>
           </div>
@@ -453,29 +428,37 @@ const Home: React.FC = () => {
             </p>
             
             <div className="space-y-4">
-              {[
-                { name: 'Warung Kopi Tung Tau', dist: '0.5 km', rating: 4.8 },
-                { name: 'Kong Djie Coffee', dist: '1.2 km', rating: 4.6 },
-                { name: 'Toko Kopi Seiring', dist: '2.1 km', rating: 4.7 }
-              ].map((item, i) => (
-                <div key={i} className="flex items-center justify-between p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 hover:bg-white/20 transition-all cursor-pointer">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-soft-green rounded-xl flex items-center justify-center text-cafe-brown">
-                      <MapPin size={24} />
+              {featuredPlaces.length > 0 ? (
+                featuredPlaces.slice(0, 3).map((place, i) => (
+                  <div 
+                    key={place.id} 
+                    onClick={() => navigate(`/places/${place.id}`)}
+                    className="flex items-center justify-between p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 hover:bg-white/20 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-soft-green rounded-xl flex items-center justify-center text-cafe-brown">
+                        <MapPin size={24} />
+                      </div>
+                      <div>
+                        <p className="font-bold">{place.name}</p>
+                        <p className="text-xs text-cafe-cream/50">{place.location || 'Di Pangkal Pinang'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-bold">{item.name}</p>
-                      <p className="text-xs text-cafe-cream/50">Di Pangkal Pinang</p>
+                    <div className="text-right">
+                      <p className="text-xs font-bold text-soft-green">{i === 0 ? '0.5 km' : i === 1 ? '1.2 km' : '2.1 km'}</p>
+                      <div className="flex items-center gap-1 text-[10px]">
+                        <Star size={10} className="fill-yellow-400 text-yellow-400 animate-pulse-subtle" /> {place.rating || '4.5'}
+                      </div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs font-bold text-soft-green">{item.dist}</p>
-                    <div className="flex items-center gap-1 text-[10px]">
-                      <Star size={10} className="fill-yellow-400 text-yellow-400" /> {item.rating}
-                    </div>
-                  </div>
+                ))
+              ) : (
+                <div className="p-6 bg-white/5 rounded-2xl border border-white/10 text-center space-y-2">
+                  <Coffee className="mx-auto text-soft-green opacity-60 animate-bounce" size={32} />
+                  <p className="font-bold text-sm">Tidak ada cafe terdekat aktif</p>
+                  <p className="text-xs text-cafe-cream/60">Silakan tambahkan cafe baru lewat menu Dasbor Admin agar tampil sebagai cafe terdekat.</p>
                 </div>
-              ))}
+              )}
             </div>
 
             <button onClick={() => navigate('/places')} className="btn-primary bg-soft-green text-cafe-brown hover:bg-white w-full sm:w-auto">

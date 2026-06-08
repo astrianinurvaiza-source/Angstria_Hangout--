@@ -5,9 +5,9 @@ import {
   Plus, Edit2, Trash2, LayoutDashboard, Coffee, 
   MapPin, Clock, Camera, Save, X, LogOut, 
   Star, Eye, Sparkles, CheckCircle, AlertCircle, Download, RefreshCcw,
-  Calendar, MessageSquare, User, Phone, Shield
+  Calendar, MessageSquare, User, Phone, Shield, CreditCard, TrendingUp, Image as ImageIcon
 } from 'lucide-react';
-import { placesService, reservationsService, commentsService } from '../services/dbService';
+import { placesService, reservationsService, commentsService, paymentsService, adminService } from '../services/dbService';
 import { Place } from '../types';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -23,11 +23,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'places' | 'reservations' | 'comments'>('places');
+  const [activeTab, setActiveTab] = useState<'places' | 'reservations' | 'comments' | 'payments'>('places');
   const [reservations, setReservations] = useState<any[]>([]);
   const [comments, setComments] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
   const [loadingComments, setLoadingComments] = useState(false);
+
+  // New admin states for payments and general database analytics (data keseluruhan)
+  const [payments, setPayments] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
+  const [adminStats, setAdminStats] = useState<any>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, target: 'image' | 'gallery') => {
     const file = e.target.files?.[0];
@@ -74,11 +80,53 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       fetchReservations(data);
       // Fetch comments in background
       fetchComments(data);
+      // Fetch admin stats (data keseluruhan)
+      fetchAdminStats();
+      // Fetch payments (bukti pembayaran kafe promosi)
+      fetchPayments();
     } catch (err: any) {
       console.error(err);
       setStatus({ type: 'error', message: err.message || 'Gagal memuat data dari database MySQL.' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAdminStats = async () => {
+    try {
+      const stats = await adminService.getStats();
+      setAdminStats(stats);
+    } catch (e) {
+      console.warn("Gagal memuat statistik platform:", e);
+    }
+  };
+
+  const fetchPayments = async () => {
+    setLoadingPayments(true);
+    try {
+      const payList = await paymentsService.getAllPayments();
+      setPayments(payList);
+    } catch (e) {
+      console.warn("Gagal memuat daftar pembayaran:", e);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  const handleApprovePayment = async (id: string, newStatus: 'success' | 'rejected') => {
+    try {
+      setStatus({ type: 'success', message: 'Sedang memproses verifikasi transaksi...' });
+      await paymentsService.approvePayment(id, newStatus);
+      setStatus({ 
+        type: 'success', 
+        message: `Pembayaran ${id} berhasil ${newStatus === 'success' ? 'DISETUJUI (LUNAS) & Kafe otomatis dipromosikan!' : 'DITOLAK'}!` 
+      });
+      // Refresh all data
+      await fetchPlaces();
+    } catch (err: any) {
+      setStatus({ type: 'error', message: err.message || 'Gagal mengubah status verifikasi pembayaran.' });
+    } finally {
+      setTimeout(() => setStatus(null), 5000);
     }
   };
 
@@ -305,21 +353,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           )}
         </AnimatePresence>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+        {/* Stats Row - Data Keseluruhan Platform */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
           {[
-            { label: 'Total Kafe', value: places.length, icon: <Coffee />, color: 'text-orange-500' },
-            { label: 'Total Reservasi', value: reservations.length, icon: <Calendar />, color: 'text-blue-500' },
-            { label: 'Rating Rata-rata', value: (places.reduce((acc, p) => acc + (p.rating || 0), 0) / (places.length || 1)).toFixed(1), icon: <Star />, color: 'text-yellow-500' },
-            { label: 'Total Ulasan', value: comments.length, icon: <MessageSquare />, color: 'text-purple-500' },
+            { label: 'Total Kafe', value: places.length, icon: <Coffee size={20} />, color: 'text-orange-500' },
+            { label: 'Total Reservasi', value: reservations.length, icon: <Calendar size={20} />, color: 'text-blue-500' },
+            { label: 'Rating Rata-rata', value: (places.reduce((acc, p) => acc + (p.rating || 0), 0) / (places.length || 1)).toFixed(1), icon: <Star size={20} />, color: 'text-yellow-500' },
+            { label: 'Total Ulasan', value: comments.length, icon: <MessageSquare size={20} />, color: 'text-purple-500' },
+            { label: 'Pemilik Kafe Terdaftar', value: adminStats?.ownersCount ?? 0, icon: <Shield size={20} />, color: 'text-amber-600' },
+            { label: 'Pengguna Aktif', value: adminStats?.usersCount ?? 0, icon: <User size={20} />, color: 'text-indigo-500' },
+            { label: 'Total Transaksi', value: adminStats?.paymentsCount ?? payments.length, icon: <CreditCard size={20} />, color: 'text-teal-500' },
+            { label: 'Pendapatan (Verified)', value: `Rp ${(adminStats?.revenue ?? 0).toLocaleString('id-ID')}`, icon: <TrendingUp size={20} />, color: 'text-emerald-500' },
           ].map((stat, idx) => (
-            <div key={idx} className="bg-cafe-cream p-8 rounded-3xl border border-cafe-pastel flex items-center gap-6 shadow-sm">
-              <div className={`w-12 h-12 bg-cafe-beige rounded-2xl flex items-center justify-center ${stat.color}`}>
-                {stat.icon}
+            <div key={idx} className="bg-cafe-cream p-5 rounded-2xl border border-cafe-pastel flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-10 h-10 bg-cafe-beige rounded-xl flex items-center justify-center shrink-0">
+                <span className={stat.color}>{stat.icon}</span>
               </div>
-              <div>
-                <p className="text-xs uppercase font-bold text-cafe-mocha/40 tracking-widest">{stat.label}</p>
-                <h4 className="text-2xl font-serif font-bold text-cafe-brown">{stat.value}</h4>
+              <div className="min-w-0">
+                <p className="text-[9px] uppercase font-bold text-cafe-mocha/50 tracking-wider truncate">{stat.label}</p>
+                <h4 className="text-base font-bold text-cafe-brown truncate">{stat.value}</h4>
               </div>
             </div>
           ))}
@@ -350,6 +402,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             }`}
           >
             💬 Ulasan Komunitas ({comments.length})
+          </button>
+          <button 
+            onClick={() => setActiveTab('payments')}
+            className={`pb-4 text-sm font-bold transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+              activeTab === 'payments' ? 'border-cafe-brown text-cafe-brown' : 'border-transparent text-cafe-mocha/60'
+            }`}
+          >
+            💳 Bukti Pembayaran ({payments.length})
           </button>
         </div>
 
@@ -559,6 +619,118 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                 )}
               </tbody>
             </table>
+          )}
+
+          {activeTab === 'payments' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-cafe-beige/50 border-b border-cafe-pastel">
+                  <tr>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">ID Transaksi</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Nama Kafe / Pemilik</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Tipe Transaksi</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Jumlah</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Bukti Transfer</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha">Status</th>
+                    <th className="px-8 py-5 text-xs font-bold uppercase tracking-widest text-cafe-mocha text-right">Verifikasi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-cafe-pastel">
+                  {loadingPayments ? (
+                    <tr><td colSpan={7}><LoadingSpinner /></td></tr>
+                  ) : payments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-20 text-cafe-mocha opacity-40 italic">
+                        Belum ada riwayat pendaftaran atau promosi yang masuk dari para owner.
+                      </td>
+                    </tr>
+                  ) : (
+                    payments.map((p) => {
+                      const isPromotion = p.type === 'promotion';
+                      return (
+                        <tr key={p.id} className="hover:bg-cafe-beige/20 transition-colors">
+                          <td className="px-8 py-6 font-mono font-bold text-xs text-cafe-brown">
+                            {p.id}
+                          </td>
+                          <td className="px-8 py-6">
+                            <h4 className="font-bold text-cafe-brown text-sm mb-1">
+                              {p.cafeName || 'Pendaftaran Owner'}
+                            </h4>
+                            <p className="text-[11px] text-cafe-mocha/60 truncate max-w-[180px]" title={p.ownerEmail}>
+                              {p.ownerEmail}
+                            </p>
+                          </td>
+                          <td className="px-8 py-6">
+                            <span className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-black border ${
+                              isPromotion 
+                                ? 'bg-amber-50 text-amber-800 border-amber-200' 
+                                : 'bg-blue-50 text-blue-800 border-blue-200'
+                            }`}>
+                              {isPromotion ? '📢 Promosi Utama (Featured)' : '🔑 Registrasi Akun Kafe'}
+                            </span>
+                            <span className="text-[9.5px] text-cafe-mocha/70 block mt-1">
+                              Metode: <strong className="text-cafe-brown font-mono">{p.method}</strong>
+                            </span>
+                          </td>
+                          <td className="px-8 py-6 font-black text-xs text-cafe-brown">
+                            Rp {parseFloat(p.amount).toLocaleString('id-ID')}
+                          </td>
+                          <td className="px-8 py-6">
+                            {p.proof ? (
+                              <button 
+                                onClick={() => setSelectedProofUrl(p.proof)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cafe-brown text-cafe-cream hover:bg-cafe-mocha hover:scale-105 transition-all rounded-lg text-[10px] font-bold shadow-sm cursor-pointer"
+                              >
+                                <ImageIcon size={13} /> Lihat Bukti
+                              </button>
+                            ) : (
+                              <span className="text-xs text-cafe-mocha/40 italic">Tidak ada bukti</span>
+                            )}
+                          </td>
+                          <td className="px-8 py-6">
+                            {p.status === 'success' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-50 text-green-700 border border-green-250">
+                                ✓ Lunas (Verified)
+                              </span>
+                            ) : p.status === 'rejected' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-250">
+                                ✕ Ditolak
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-250 animate-pulse">
+                                ● Pending Review
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-8 py-6 text-right">
+                            {p.status === 'pending' ? (
+                              <div className="flex justify-end gap-1.5">
+                                <button 
+                                  onClick={() => handleApprovePayment(p.id, 'success')}
+                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-sm hover:scale-105 transition-all"
+                                  title="Konfirmasi pembayaran sah & lunas"
+                                >
+                                  Konfirmasi
+                                </button>
+                                <button 
+                                  onClick={() => handleApprovePayment(p.id, 'rejected')}
+                                  className="px-2.5 py-1 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-[10px] font-black cursor-pointer shadow-sm hover:scale-105 transition-all"
+                                  title="Tolak pembayaran (bukti palsu atau tidak sesuai)"
+                                >
+                                  Tolak
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-xs font-bold text-cafe-mocha/50">Sudah Selesai</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
@@ -834,6 +1006,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox Preview Modal Bukti dan Transaksi */}
+      <AnimatePresence>
+        {selectedProofUrl && (
+          <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-cafe-cream rounded-[2rem] border border-cafe-pastel max-w-2xl w-full p-6 shadow-2xl relative"
+            >
+              <button 
+                onClick={() => setSelectedProofUrl(null)}
+                className="absolute top-4 right-4 bg-cafe-beige text-cafe-mocha rounded-full p-2.5 hover:text-cafe-brown hover:scale-105 transition-all shadow-sm cursor-pointer"
+                title="Tutup Preview"
+              >
+                <X size={18} />
+              </button>
+              <h3 className="text-lg font-bold text-cafe-brown mb-4 font-serif">Aktivitas Verifikasi Bukti Transfer Kafe</h3>
+              <div className="max-h-[60vh] overflow-y-auto rounded-2xl border border-cafe-pastel p-2 bg-cafe-beige/45 text-center">
+                <img src={selectedProofUrl} alt="Bukti Transfer Lunas" className="max-w-full h-auto mx-auto rounded-xl shadow-md border border-cafe-pastel" />
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button 
+                  onClick={() => setSelectedProofUrl(null)}
+                  className="px-6 py-2.5 bg-cafe-brown hover:bg-cafe-mocha text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md"
+                >
+                  Tutup Pratonton
+                </button>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>

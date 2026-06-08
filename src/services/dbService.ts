@@ -114,9 +114,6 @@ const normalizePlace = (p: any): Place => {
     rating: typeof p.rating === 'number' ? p.rating : parseFloat(p.rating || '0'),
     lat: p.lat !== null && p.lat !== undefined ? parseFloat(p.lat) : (p.latitude !== null && p.latitude !== undefined ? parseFloat(p.latitude) : null),
     lng: p.lng !== null && p.lng !== undefined ? parseFloat(p.lng) : (p.longitude !== null && p.longitude !== undefined ? parseFloat(p.longitude) : (p.longtitude !== null && p.longtitude !== undefined ? parseFloat(p.longtitude) : null)),
-    latitude: p.latitude !== null && p.latitude !== undefined ? parseFloat(p.latitude) : (p.lat !== null && p.lat !== undefined ? parseFloat(p.lat) : null),
-    longitude: p.longitude !== null && p.longitude !== undefined ? parseFloat(p.longitude) : (p.lng !== null && p.lng !== undefined ? parseFloat(p.lng) : (p.longtitude !== null && p.longtitude !== undefined ? parseFloat(p.longtitude) : null)),
-    longtitude: p.longtitude !== null && p.longtitude !== undefined ? parseFloat(p.longtitude) : (p.longitude !== null && p.longitude !== undefined ? parseFloat(p.longitude) : (p.lng !== null && p.lng !== undefined ? parseFloat(p.lng) : null)),
     socials: socials || undefined
   };
 };

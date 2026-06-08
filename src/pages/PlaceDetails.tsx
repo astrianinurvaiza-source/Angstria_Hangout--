@@ -378,7 +378,7 @@ const PlaceDetails: React.FC = () => {
               <div className="rounded-3xl overflow-hidden border border-cafe-pastel shadow-lg h-[400px] relative">
                 <iframe
                   title={`Peta Lokasi ${place.name}`}
-                  src={`https://maps.google.com/maps?q=${place.lat || -2.1283},${place.lng || 106.1130}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
+                  src={`https://maps.google.com/maps?q=${place.latitude ?? place.lat ?? -2.1283},${place.longitude ?? place.longtitude ?? place.lng ?? 106.1130}&t=&z=16&ie=UTF8&iwloc=&output=embed`}
                   width="100%"
                   height="100%"
                   style={{ border: 0 }}
@@ -390,6 +390,11 @@ const PlaceDetails: React.FC = () => {
                 <div className="space-y-1 text-center sm:text-left">
                   <h4 className="font-bold text-cafe-brown">{place.name}</h4>
                   <p className="text-xs text-cafe-mocha">{place.location}</p>
+                  {(place.latitude !== undefined || place.lat !== undefined) && (
+                    <p className="text-[10px] text-cafe-mocha font-mono opacity-80 mt-1">
+                      Koordinat: {place.latitude ?? place.lat}, {place.longitude ?? place.longtitude ?? place.lng}
+                    </p>
+                  )}
                 </div>
                 <a
                   href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.name + ' ' + place.location)}`}

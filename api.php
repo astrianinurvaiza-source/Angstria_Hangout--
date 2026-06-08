@@ -131,7 +131,6 @@ try {
             `id` INT AUTO_INCREMENT NOT NULL,
             `placeId` VARCHAR(50) NOT NULL,
             `customerName` VARCHAR(100) NOT NULL,
-            `customerEmail` VARCHAR(100) DEFAULT NULL,
             `customerPhone` VARCHAR(50) NOT NULL,
             `bookingDate` VARCHAR(50) NOT NULL,
             `bookingTime` VARCHAR(50) NOT NULL,
@@ -142,12 +141,6 @@ try {
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-        // Ensure customerEmail column exists in reservations
-        $qCustEmail = $conn->query("SHOW COLUMNS FROM `reservations` LIKE 'customerEmail'");
-        if ($qCustEmail->rowCount() === 0) {
-            $conn->exec("ALTER TABLE `reservations` ADD COLUMN `customerEmail` VARCHAR(100) DEFAULT NULL");
-        }
-
         // 6. Buat Tabel payments jika belum ada
         $conn->exec("CREATE TABLE IF NOT EXISTS `payments` (
             `id` VARCHAR(50) NOT NULL,
@@ -157,16 +150,6 @@ try {
             `type` VARCHAR(50) NOT NULL,
             `method` VARCHAR(50) NOT NULL,
             `status` VARCHAR(20) DEFAULT 'success',
-            `createdAt` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-
-        // 7. Buat Tabel users jika belum ada
-        $conn->exec("CREATE TABLE IF NOT EXISTS `users` (
-            `id` INT AUTO_INCREMENT NOT NULL,
-            `name` VARCHAR(100) NOT NULL,
-            `email` VARCHAR(100) NOT NULL UNIQUE,
-            `password` VARCHAR(255) NOT NULL,
             `createdAt` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
@@ -886,83 +869,6 @@ switch ($action) {
         }
         break;
 
-    case 'user_register':
-        $data = get_input_json();
-        $name = trim($data['name'] ?? '');
-        $email = trim(strtolower($data['email'] ?? ''));
-        $password = trim($data['password'] ?? '');
-
-        if (empty($name) || empty($email) || empty($password)) {
-            echo json_encode(["success" => false, "message" => "Semua field wajib diisi"]);
-            exit();
-        }
-
-        try {
-            // Cek apakah email sudah terdaftar di table users
-            $stmt = $conn->prepare("SELECT id FROM users WHERE email = :email LIMIT 1");
-            $stmt->execute(['email' => $email]);
-            if ($stmt->fetch()) {
-                echo json_encode(["success" => false, "message" => "Email sudah terdaftar"]);
-                exit();
-            }
-
-            // Insert user baru
-            $stmtInsert = $conn->prepare("INSERT INTO users (name, email, password) VALUES (:name, :email, :password)");
-            $stmtInsert->execute([
-                'name' => $name,
-                'email' => $email,
-                'password' => $password
-            ]);
-
-            $newId = $conn->lastInsertId();
-            echo json_encode([
-                "success" => true,
-                "message" => "Pendaftaran pengguna berhasil",
-                "user" => [
-                    "id" => intval($newId),
-                    "name" => $name,
-                    "email" => $email
-                ]
-            ]);
-        } catch (PDOException $e) {
-            echo json_encode(["success" => false, "message" => "Gagal mendaftar pengguna: " . $e->getMessage()]);
-        }
-        break;
-
-    case 'user_login':
-        $data = get_input_json();
-        $email = trim(strtolower($data['email'] ?? ''));
-        $password = trim($data['password'] ?? '');
-
-        if (empty($email) || empty($password)) {
-            echo json_encode(["success" => false, "message" => "Email dan password wajib diisi"]);
-            exit();
-        }
-
-        try {
-            $stmt = $conn->prepare("SELECT * FROM users WHERE email = :email LIMIT 1");
-            $stmt->execute(['email' => $email]);
-            $userObj = $stmt->fetch();
-
-            if (!$userObj || $userObj['password'] !== $password) {
-                echo json_encode(["success" => false, "message" => "Kombinasi email atau password salah"]);
-                exit();
-            }
-
-            echo json_encode([
-                "success" => true,
-                "message" => "Login berhasil",
-                "user" => [
-                    "id" => intval($userObj['id']),
-                    "name" => $userObj['name'],
-                    "email" => $userObj['email']
-                ]
-            ]);
-        } catch (PDOException $e) {
-            echo json_encode(["success" => false, "message" => "Gagal login pengguna: " . $e->getMessage()]);
-        }
-        break;
-
     case 'get_owner':
         $email = trim(strtolower($_GET['email'] ?? ''));
         if (empty($email)) {
@@ -1040,36 +946,8 @@ switch ($action) {
     case 'get_reservations':
         $placeId = $_GET['placeId'] ?? '';
         $ownerEmail = trim(strtolower($_GET['ownerEmail'] ?? ''));
-        $customerEmail = trim(strtolower($_GET['customerEmail'] ?? ''));
 
         try {
-            // Jika customerEmail disediakan, kita ambil semua reservasi milik customer tersebut
-            if (!empty($customerEmail)) {
-                $stmt = $conn->prepare("SELECT r.*, p.name as placeName FROM reservations r JOIN places p ON r.placeId = p.id WHERE LOWER(r.customerEmail) = :customerEmail ORDER BY r.createdAt DESC");
-                $stmt->execute(['customerEmail' => $customerEmail]);
-                $reservations = $stmt->fetchAll();
-
-                $result = [];
-                foreach ($reservations as $row) {
-                    $result[] = [
-                        "id" => intval($row['id']),
-                        "placeId" => $row['placeId'],
-                        "placeName" => $row['placeName'],
-                        "customerName" => $row['customerName'],
-                        "customerEmail" => $row['customerEmail'] ?? '',
-                        "customerPhone" => $row['customerPhone'],
-                        "bookingDate" => $row['bookingDate'],
-                        "bookingTime" => $row['bookingTime'],
-                        "guests" => intval($row['guests']),
-                        "notes" => $row['notes'] ?? '',
-                        "status" => $row['status'] ?? 'pending',
-                        "createdAt" => $row['createdAt']
-                    ];
-                }
-                echo json_encode(["success" => true, "data" => $result]);
-                exit();
-            }
-
             $targetPlaceId = $placeId;
 
             if (empty($targetPlaceId) && !empty($ownerEmail)) {
@@ -1097,7 +975,6 @@ switch ($action) {
                     "placeId" => $row['placeId'],
                     "placeName" => $row['placeName'],
                     "customerName" => $row['customerName'],
-                    "customerEmail" => $row['customerEmail'] ?? '',
                     "customerPhone" => $row['customerPhone'],
                     "bookingDate" => $row['bookingDate'],
                     "bookingTime" => $row['bookingTime'],
@@ -1118,7 +995,6 @@ switch ($action) {
         $data = get_input_json();
         $placeId = trim($data['placeId'] ?? '');
         $customerName = trim($data['customerName'] ?? '');
-        $customerEmail = trim(strtolower($data['customerEmail'] ?? ''));
         $customerPhone = trim($data['customerPhone'] ?? '');
         $bookingDate = trim($data['bookingDate'] ?? '');
         $bookingTime = trim($data['bookingTime'] ?? '');
@@ -1132,13 +1008,12 @@ switch ($action) {
 
         try {
             $stmt = $conn->prepare("
-                INSERT INTO reservations (placeId, customerName, customerEmail, customerPhone, bookingDate, bookingTime, guests, notes, status, createdAt)
-                VALUES (:placeId, :customerName, :customerEmail, :customerPhone, :bookingDate, :bookingTime, :guests, :notes, 'pending', NOW())
+                INSERT INTO reservations (placeId, customerName, customerPhone, bookingDate, bookingTime, guests, notes, status, createdAt)
+                VALUES (:placeId, :customerName, :customerPhone, :bookingDate, :bookingTime, :guests, :notes, 'pending', NOW())
             ");
             $stmt->execute([
                 'placeId' => $placeId,
                 'customerName' => $customerName,
-                'customerEmail' => !empty($customerEmail) ? $customerEmail : null,
                 'customerPhone' => $customerPhone,
                 'bookingDate' => $bookingDate,
                 'bookingTime' => $bookingTime,
@@ -1154,7 +1029,6 @@ switch ($action) {
                     "id" => intval($newId),
                     "placeId" => $placeId,
                     "customerName" => $customerName,
-                    "customerEmail" => $customerEmail,
                     "customerPhone" => $customerPhone,
                     "bookingDate" => $bookingDate,
                     "bookingTime" => $bookingTime,

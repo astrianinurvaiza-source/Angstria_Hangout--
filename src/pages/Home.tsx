@@ -135,6 +135,10 @@ const Home: React.FC = () => {
             transition={{ duration: 0.8 }}
             className="space-y-6"
           >
+            <div className="inline-flex items-center gap-2 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200 shadow-sm">
+              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-800">🟢 Terkoneksi ke MySQL phpMyAdmin</span>
+            </div>
             
             <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-serif font-black text-cafe-brown leading-[1.15] tracking-tight">
               Temukan Tempat <br />
@@ -350,19 +354,19 @@ const Home: React.FC = () => {
           ) : (
             <div className="bg-cafe-cream border border-cafe-pastel rounded-3xl p-8 max-w-lg mx-auto text-center space-y-4 shadow-sm">
               <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center mx-auto animate-bounce-subtle">
-                <Coffee size={24} />
+                <Database size={24} />
               </div>
-              <h3 className="font-serif font-bold text-lg text-cafe-brown">Belum Ada Rekomendasi Kafe</h3>
+              <h3 className="font-serif font-bold text-lg text-cafe-brown">Belum Terhubung ke phpMyAdmin</h3>
               {errorMsg ? (
-                <div className="p-4 bg-orange-50/60 text-orange-850 text-xs rounded-2xl text-left border border-orange-200/50 space-y-1.5 font-sans">
+                <div className="p-4 bg-orange-50/60 text-orange-800 text-xs rounded-2xl text-left border border-orange-200/50 space-y-1.5 font-sans">
                   <p className="font-bold text-orange-950 flex items-center gap-1.5">
-                    <span className="w-2 h-2 bg-orange-500 rounded-full"></span> Status Sinkronisasi:
+                    <span className="w-2 h-2 bg-orange-500 rounded-full"></span> Detail Kendala Jaringan:
                   </p>
                   <p className="leading-relaxed text-[11px] font-medium">{errorMsg}</p>
                 </div>
               ) : (
                 <p className="text-xs text-cafe-mocha leading-relaxed">
-                  Data kafe saat ini sedang kosong. Klik tombol di bawah ini untuk mendaftarkan 10 kafe estetik secara otomatis ke sistem database Anda.
+                  Aplikasi React Anda belum terhubung atau data di phpMyAdmin kosong. Gunakan tombol di bawah ini untuk mengisi data master 10 kafe legendaris secara langsung ke database Anda.
                 </p>
               )}
               <div className="flex flex-col gap-2 pt-2">
@@ -371,8 +375,11 @@ const Home: React.FC = () => {
                   disabled={resetting}
                   className="px-6 py-3 bg-cafe-brown text-white text-xs font-semibold rounded-full hover:bg-cafe-mocha transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  {resetting ? 'Sedang Sinkronisasi...' : '✨ Impor 10 Data Master Kafe'}
+                  {resetting ? 'Sedang Sinkronisasi...' : '🔌 Hubungkan & Impor Data Master (10 Kafe)'}
                 </button>
+                <p className="text-[10px] text-cafe-mocha/60">
+                  Pastikan nama database di phpMyAdmin Anda adalah <code className="bg-cafe-beige px-1.5 py-0.5 rounded">angstria_hangout</code>.
+                </p>
               </div>
             </div>
           )}
@@ -406,19 +413,19 @@ const Home: React.FC = () => {
         ) : (
           <div className="bg-cafe-cream border border-cafe-pastel rounded-3xl p-10 text-center max-w-xl mx-auto space-y-4 shadow-sm">
             <span className="inline-block p-4 bg-orange-50 text-orange-700 rounded-full animate-pulse-subtle">
-              <Coffee size={32} />
+              <Database size={32} />
             </span>
-            <h3 className="font-serif font-black text-xl text-cafe-brown">Daftar Kafe Belum Tersedia</h3>
+            <h3 className="font-serif font-black text-xl text-cafe-brown">Status Koneksi phpMyAdmin</h3>
             {errorMsg ? (
               <div className="p-4 bg-orange-50/60 text-orange-850 text-xs rounded-2xl text-left border border-orange-200/50 space-y-1.5 font-sans max-w-md mx-auto">
                 <p className="font-bold text-orange-950 flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-orange-500 rounded-full"></span> Status Sinkronisasi:
+                  <span className="w-2 h-2 bg-orange-500 rounded-full"></span> Detail Kendala Jaringan:
                 </p>
                 <p className="leading-relaxed text-[11px] font-medium">{errorMsg}</p>
               </div>
             ) : (
               <p className="text-xs text-cafe-mocha leading-relaxed">
-                Belum ada data kafe yang dimuat. Anda dapat mendatangkan data baru secara instan atau mendaftarkannya lewat <strong>Dasbor Admin</strong>.
+                Koneksi MySQL Anda saat ini terdeteksi kosong. Lakukan impor <code className="bg-cafe-beige px-1 py-0.5 rounded">database.sql</code> secara langsung melalui phpMyAdmin di server localhost/hosting Anda, atau lakukan penambahan kafe baru melalui <strong>Dasbor Admin</strong>.
               </p>
             )}
             <div className="flex gap-2 justify-center pt-2">
@@ -554,7 +561,7 @@ const Home: React.FC = () => {
                 Bergabunglah dengan direktori pilihan kami dan biarkan tempat Anda ditemukan oleh ribuan pencinta kopi dan petualang aktif setiap bulan.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Link to="/owner" className="btn-primary bg-white text-cafe-brown hover:bg-soft-green px-12 flex items-center justify-center gap-2">
+                <Link to="/admin" className="btn-primary bg-white text-cafe-brown hover:bg-soft-green px-12 flex items-center justify-center gap-2">
                   <Plus size={20} /> Daftarkan Kafe Anda
                 </Link>
                 <Link to="/about" className="px-12 py-3 bg-white/10 backdrop-blur-md text-white rounded-full font-bold border border-white/20 hover:bg-white/20 text-center">

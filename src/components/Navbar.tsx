@@ -244,14 +244,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
           </button>
 
           <button 
-            onClick={() => setIsApiModalOpen(true)}
-            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
-            title="Pengaturan Database"
-          >
-            <Database size={20} />
-          </button>
-
-          <button 
             onClick={handleClearLocalData}
             className="p-2 rounded-xl hover:bg-rose-50 transition-colors text-rose-700 cursor-pointer flex items-center gap-1"
             title="Hapus Sesi & Data Lokal"
@@ -296,14 +288,6 @@ const Navbar: React.FC<NavbarProps> = ({ user, darkMode, toggleDarkMode }) => {
         {/* Mobile Nav Actions */}
         <div className="md:hidden flex items-center gap-2">
           
-          <button 
-            onClick={() => setIsApiModalOpen(true)}
-            className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"
-            title="Pengaturan Database"
-          >
-            <Database size={20} />
-          </button>
-
           <button 
             onClick={toggleDarkMode}
             className="p-2 rounded-full hover:bg-cafe-pastel transition-colors text-cafe-brown cursor-pointer"

@@ -22,8 +22,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [editingPlace, setEditingPlace] = useState<Partial<Place> | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const [activeTab, setActiveTab] = useState<'places' | 'reservations' | 'comments'>('places');
+
+  const handleResetDb = async () => {
+    if (window.confirm('Tindakan ini akan menghapus data saat ini dan mengisi kembali database phpMyAdmin Anda dengan 10 data kafe rekomendasi Pangkal Pinang. Lanjutkan?')) {
+      setResetting(true);
+      setStatus({ type: 'success', message: 'Sedang mereset database phpMyAdmin...' });
+      try {
+        await placesService.resetDatabase();
+        setStatus({ type: 'success', message: 'Database phpMyAdmin berhasil direkap & di-seeding ulang!' });
+        fetchPlaces();
+      } catch (err: any) {
+        setStatus({ type: 'error', message: err.message || 'Gagal mereset database phpMyAdmin.' });
+      } finally {
+        setResetting(false);
+        setTimeout(() => setStatus(null), 5000);
+      }
+    }
+  };
   const [reservations, setReservations] = useState<any[]>([]);
   const [comments, setComments] = useState<any[]>([]);
   const [loadingReservations, setLoadingReservations] = useState(false);
@@ -274,9 +292,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
             <button 
               onClick={() => { setEditingPlace({}); setIsModalOpen(true); }}
-              className="px-6 py-3 bg-cafe-brown text-cafe-cream rounded-2xl font-bold flex items-center gap-2 hover:scale-105 transition-all shadow-lg text-sm"
+              className="px-6 py-3 bg-cafe-brown text-cafe-cream rounded-2xl font-bold flex items-center gap-2 hover:scale-105 transition-all shadow-lg text-sm cursor-pointer"
             >
               <Plus size={18} /> Tambah Kafe Baru
+            </button>
+            <button 
+              onClick={handleResetDb}
+              disabled={resetting}
+              className="px-6 py-3 bg-rose-600 text-white rounded-2xl font-bold flex items-center gap-2 hover:bg-rose-700 transition-all shadow-lg text-sm disabled:opacity-50 cursor-pointer"
+              title="Reset database phpMyAdmin ke data awal bawaan"
+            >
+              <RefreshCcw size={18} className={resetting ? "animate-spin" : ""} /> Reset Database
             </button>
             <button 
               onClick={handleLogout}
@@ -369,7 +395,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                 {loading ? (
                   <tr><td colSpan={4}><LoadingSpinner /></td></tr>
                 ) : places.length === 0 ? (
-                  <tr><td colSpan={4} className="text-center py-20 text-cafe-mocha opacity-40 italic">Kafe tidak ditemukan. Tambahkan kafe baru atau isi ulang database dengan data rekomendasi.</td></tr>
+                  <tr>
+                    <td colSpan={4} className="text-center py-16 px-8 text-cafe-mocha">
+                      <p className="italic opacity-60 mb-4">Kafe tidak ditemukan di database phpMyAdmin Anda.</p>
+                      <button
+                        onClick={handleResetDb}
+                        disabled={resetting}
+                        className="mx-auto px-5 py-2.5 bg-cafe-brown text-cafe-cream hover:bg-cafe-brown/90 text-xs font-bold rounded-xl flex items-center gap-2 cursor-pointer transition-all shadow-md active:scale-95 disabled:opacity-50"
+                      >
+                        <RefreshCcw size={14} className={resetting ? "animate-spin" : ""} />
+                        Isi Ulang Database dengan 10 Data Rekomendasi
+                      </button>
+                    </td>
+                  </tr>
                 ) : (
                   places.map((place) => (
                     <tr key={place.id} className="hover:bg-cafe-beige/20 transition-colors">

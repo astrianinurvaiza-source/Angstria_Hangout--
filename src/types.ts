@@ -19,9 +19,6 @@ export interface Place {
   featured?: boolean;
   lat?: number;
   lng?: number;
-  latitude?: number;
-  longitude?: number;
-  longtitude?: number;
   createdAt: string;
 }
 
